@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Local plugins · Runtime",
+    "description": "Eight host-side components: memory, git and file guards, read-only gate, sandbox allowlist, session priming, and commit nagging. Each row is a separate switch."
+  }
+}

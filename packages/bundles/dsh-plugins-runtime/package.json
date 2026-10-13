@@ -1,0 +1,54 @@
+{
+  "name": "@gavinc-cn/dsh-plugins-runtime",
+  "version": "0.1.0",
+  "description": "DSH 插件组合包（runtime bundle）：8 个 node 侧组件（记忆、git/文件守卫、只读闸门、沙箱白名单、重开会话再注入等），每个是一行独立开关；UI 组件见 @gavinc-cn/dsh-plugins-ui。",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/bundles/dsh-plugins-runtime"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/bundles/dsh-plugins-runtime#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib",
+    "locale",
+    "cordis.patch.yml"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "bundle",
+    "plugin",
+    "runtime"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "dependencies": {
+    "@gavinc-cn/dsh-patch-ask-expand": "^0.1.1",
+    "@gavinc-cn/dsh-superpowers-priming": "^0.1.0",
+    "@gavinc-cn/dsh-memory": "^0.1.0",
+    "@gavinc-cn/dsh-autocommit": "^0.1.1",
+    "@gavinc-cn/dsh-git-guard": "^0.1.0",
+    "@gavinc-cn/dsh-file-guard": "^0.1.0",
+    "@gavinc-cn/sandbox-path-allowlist": "^0.1.1",
+    "@gavinc-cn/dsh-readonly-guard": "^0.1.0"
+  }
+}

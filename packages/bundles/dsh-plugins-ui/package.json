@@ -1,0 +1,51 @@
+{
+  "name": "@gavinc-cn/dsh-plugins-ui",
+  "version": "0.1.0",
+  "description": "DSH 插件组合包（UI bundle）：5 个只作用于 Web GUI 的组件，每个是一行独立开关；node/运行时组件见 @gavinc-cn/dsh-plugins-runtime。",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/bundles/dsh-plugins-ui"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/bundles/dsh-plugins-ui#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib",
+    "locale",
+    "cordis.patch.yml"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "bundle",
+    "plugin",
+    "ui"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "dependencies": {
+    "@gavinc-cn/kanban-board": "^0.1.2",
+    "@gavinc-cn/dsh-dim-text": "^0.1.1",
+    "@gavinc-cn/dsh-session-unread-persist": "^0.1.1",
+    "@gavinc-cn/dsh-turn-labels": "^0.5.2",
+    "@gavinc-cn/dsh-sidebar-width-persist": "^0.1.0"
+  }
+}

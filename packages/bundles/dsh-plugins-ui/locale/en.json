@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Local plugins · UI",
+    "description": "Five Web-GUI-only components: task board, dimmed text, session unread dots, turn labels, and sidebar width persistence. Each row is a separate switch."
+  }
+}

@@ -1,0 +1,71 @@
+# @gavinc-cn/dsh-plugins-runtime —— 「运行时组件」的组合行（2026-10-13 从 @gavinc-cn/dsh-plugins 拆出）。
+#
+# 归属判据：组件包的 package.json 里**没有** `dsh.client` 声明 —— 也就是 node（宿主）侧运行的组件。
+# 与 @gavinc-cn/dsh-plugins-ui 互补（那个包里是 5 个声明了 dsh.client.platform: "web" 的纯 UI 组件），
+# 两个包合起来 = 拆分前 @gavinc-cn/dsh-plugins 的全部 13 个组件，行 id 与行顺序都保持不变。
+#
+# 注意 dsh-patch-ask-expand：它**不是**客户端插件（没有 dsh.client），但它改的是官方
+# @deepseek-ai/dsh-client-ui-tool 的成品 client bundle —— 效果在 UI 上，运行体在宿主侧。
+# 按上面的客观判据它归本包；因此「只装 UI 包」不会得到它。
+#
+# 工作方式（与拆分前一致）：
+#   * Plugins 面板出现 @gavinc-cn/dsh-plugins-runtime 卡片，卡片内每个行 = 一个组件 = 一个开关；
+#   * 行开关写回 profile patch 的 `- id: <行id>` 覆盖行（行状态留在各 profile，可各自独立开关）；
+#   * 整包开关控制包名在不在 profile 的 dsh.profile.bundles。
+#
+# 行 id 与包名的约定：id = 包名去掉 scope（@gavinc-cn/dsh-memory → dsh-memory），
+# name 才是模块说明符（= 完整包名）。
+#
+# **同一个行 id 在整棵组合树里只能出现一次**：写进本文件的行，profile 侧不要再写同名 insert
+# （同 id 两行会被 dsh-plugin-manager 的 listPlugins() 判成 unaddressable，面板里既没有开关
+# 也拨不动），只写不带 insert 的覆盖行。
+#
+# 机器相关配置（本机检出路径、状态目录、日志路径）**不进本文件**：写在各 profile 的覆盖行里，
+# 例如 `- id: dsh-superpowers-priming` + `config: { skillPath: ... }`。
+#
+# 依赖：本包在 package.json 的 dependencies 里声明下述 8 个组件包 —— 装本包即把它们一并装上。
+# 发布顺序：**8 个组件包先发（其中 @gavinc-cn/dsh-readonly-guard 必须先于本包上 registry），本包最后发**。
+#
+# 改组件集合 = 改本文件（patch 层 live 热重载，不需要重装/重启）；改完把仓库真源铺到共享活副本
+# （在仓库根执行：bash scripts/deploy-to-dsh.sh dsh-plugins-runtime）。
+#
+# 注意：别再对 profile 跑 pnpm install —— registry 版会盖住共享活副本里那份（见仓库 README）。
+
+# dsh-patch-ask-expand：启动时对官方 dsh-client-ui-tool 的 client bundle 打幂等文本补丁。
+- insert:
+    - id: dsh-patch-ask-expand
+      name: "@gavinc-cn/dsh-patch-ask-expand"
+
+- insert:
+    - id: dsh-superpowers-priming
+      name: "@gavinc-cn/dsh-superpowers-priming"
+
+- insert:
+    - id: dsh-memory
+      name: "@gavinc-cn/dsh-memory"
+
+- insert:
+    - id: dsh-autocommit
+      name: "@gavinc-cn/dsh-autocommit"
+
+- insert:
+    - id: dsh-git-guard
+      name: "@gavinc-cn/dsh-git-guard"
+
+- insert:
+    - id: dsh-file-guard
+      name: "@gavinc-cn/dsh-file-guard"
+
+# sandbox-path-allowlist：沙箱升权白名单。包内默认 paths 为空 = 不生效（安全的空转默认值），
+# 实际路径由 profile 覆盖行给（容器 web 与宿主 desktop 各自给各自的绝对路径）。
+- insert:
+    - id: sandbox-path-allowlist
+      name: "@gavinc-cn/sandbox-path-allowlist"
+
+# dsh-readonly-guard：bash 只读闸门（非只读命令转到 DSH 原生审批）。默认**停用**：
+# 容器 web 侧刻意不挂（与既有 sandbox/approval 分层重叠），宿主 desktop 侧由覆盖行
+# `- id: dsh-readonly-guard` + `disabled: false` 打开（见 desktop 的 cordis.patch.yml）。
+- insert:
+    - id: dsh-readonly-guard
+      disabled: true
+      name: "@gavinc-cn/dsh-readonly-guard"

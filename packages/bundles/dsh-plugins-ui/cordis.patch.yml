@@ -1,0 +1,51 @@
+# @gavinc-cn/dsh-plugins-ui —— 「UI 组件」的组合行（2026-10-13 从 @gavinc-cn/dsh-plugins 拆出）。
+#
+# 归属判据（唯一且客观）：组件包的 package.json 里声明了 `dsh.client.platform: "web"` ——
+# 浏览器半边经 exports["./client"] 指向 lib/client.bundle.js，node 半边是空 apply()。
+# 换句话说：这些组件只在 Web GUI（容器 web 与桌面端共用同一套前端）里起作用。
+# 不满足该判据的组件（含 node 侧改 web client 产物的 dsh-patch-ask-expand）都在
+# @gavinc-cn/dsh-plugins-runtime 里，两个包合起来仍是拆分前的 13 个组件。
+#
+# 工作方式（与拆分前一致）：
+#   * Plugins 面板出现 @gavinc-cn/dsh-plugins-ui 卡片，卡片内每个行 = 一个组件 = 一个开关；
+#   * 行开关写回 profile patch 的 `- id: <行id>` 覆盖行（行状态留在各 profile，可各自独立开关）；
+#   * 整包开关控制包名在不在 profile 的 dsh.profile.bundles。
+#
+# 行 id 与包名的约定：id = 包名去掉 scope（@gavinc-cn/dsh-turn-labels → dsh-turn-labels），
+# name 才是模块说明符（= 完整包名）。
+#
+# **同一个行 id 在整棵组合树里只能出现一次**：写进本文件的行，profile 侧不要再写同名 insert
+# （同 id 两行会被 dsh-plugin-manager 的 listPlugins() 判成 unaddressable，面板里既没有开关
+# 也拨不动），只写不带 insert 的覆盖行。拆分时特意保持「行 id 与行顺序」不变，就是为了让
+# 各 profile 里既有的覆盖行原样继续命中。
+#
+# 机器相关配置（本机检出路径、状态目录、日志路径）**不进本文件**：写在各 profile 的覆盖行里。
+#
+# 依赖：本包在 package.json 的 dependencies 里声明下述 5 个组件包 —— 装本包即把它们一并装上，
+# 各 profile 因此能按包名解析到每一行。发布顺序：**5 个组件包先发，本包最后发**。
+#
+# 改组件集合 = 改本文件（patch 层 live 热重载，不需要重装/重启）；改完把仓库真源铺到共享活副本
+# （在仓库根执行：bash scripts/deploy-to-dsh.sh dsh-plugins-ui）。
+#
+# 注意：别再对 profile 跑 pnpm install —— registry 版会盖住共享活副本里那份（见仓库 README）。
+
+- insert:
+    - id: kanban-board
+      disabled: true
+      name: "@gavinc-cn/kanban-board"
+
+- insert:
+    - id: dsh-dim-text
+      name: "@gavinc-cn/dsh-dim-text"
+
+- insert:
+    - id: dsh-session-unread-persist
+      name: "@gavinc-cn/dsh-session-unread-persist"
+
+- insert:
+    - id: dsh-turn-labels
+      name: "@gavinc-cn/dsh-turn-labels"
+
+- insert:
+    - id: dsh-sidebar-width-persist
+      name: "@gavinc-cn/dsh-sidebar-width-persist"
