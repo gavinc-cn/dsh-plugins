@@ -1,0 +1,17 @@
+# monorepo 工作区：packages/<分组>/<包> 每个目录 = 一个可独立发布的 npm 包。
+#
+# 分组只有三个（只是源码树里的组织方式，不影响 npm 包名与 dsh 的落地路径）：
+#   ui/       5 个只作用于 Web GUI 的组件包（声明 dsh.client.platform: "web"）
+#   runtime/  8 个宿主（node）侧组件包
+#   bundles/  3 个组合包：dsh-plugins-ui（UI 的 5 行）+ dsh-plugins-runtime（运行时的 8 行）
+#             + dsh-plugins（聚合元包，0.2.0 起不再含任何配置行）
+#
+# 注意：包之间的依赖一律写**普通 semver**（如 "^0.1.0"），不要用 `workspace:` 协议 ——
+# 本仓库的发布方式是 `npm publish <tarball>`（流程见 README「发布」一节），
+# `workspace:` 协议只在 pnpm publish 时才会被改写，npm 下无法解析。
+# 本文件的作用只是让 `pnpm -r test` 之类的递归命令能找到各包，不参与运行时解析
+# （dsh 加载的是共享活副本，见 README「落地形态」）。
+packages:
+  - 'packages/ui/*'
+  - 'packages/runtime/*'
+  - 'packages/bundles/*'

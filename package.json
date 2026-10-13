@@ -1,0 +1,18 @@
+{
+  "name": "dsh-plugins",
+  "private": true,
+  "version": "0.0.0",
+  "description": "DeepSeek Harness (DSH) plugin monorepo: 13 component packages + 2 profile bundles + 1 aggregate metapackage.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check-bundles.mjs",
+    "deploy": "bash scripts/deploy-to-dsh.sh"
+  }
+}
