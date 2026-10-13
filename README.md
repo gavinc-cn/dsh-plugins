@@ -106,6 +106,18 @@ bash scripts/deploy-to-dsh.sh                # 铺到共享活副本（patch 层
 6. 面板上组件行的标题/说明来自**组件包自己**的 `locale/*.json`，卡片标题/描述来自 **bundle 包**的
    `locale/*.json`；宿主启动时缓存行元数据 ⇒ 运行中改 `locale` 要重启宿主才看得到。
 
+## 发布
+
+顺序有硬依赖：**13 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败）。
+
+```bash
+npm publish <tarball> --registry=https://registry.npmjs.org --access public
+```
+
+包内 `publishConfig` 已固化 registry 与 `access: public`；包之间的依赖一律写普通 semver
+（`workspace:` 协议只在 pnpm 下会被改写，npm 解析不了）。发布前先跑 `node scripts/check-bundles.mjs`，
+确认行 id 全局唯一、每行都写进了对应 bundle 的 `dependencies`。
+
 ## 相关文档
 
 各包自己的 README 见 `packages/<分组>/<包>/README.md`（也是随 npm 发布的那份）。
