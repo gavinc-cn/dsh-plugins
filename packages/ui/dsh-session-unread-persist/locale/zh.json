@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "未读绿点持久化",
+    "description": "把 Web GUI 会话列表的「已完成未查看」绿点 (uiSession.completionUnread) 持久化到 localStorage: 刷新页面、重开浏览器后绿点仍在, 点开会话后照常消失。"
+  }
+}

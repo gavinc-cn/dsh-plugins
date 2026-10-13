@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Dimmed UI text",
+    "description": "Dims the Web GUI text hierarchy one step via ctx.theme.overrideTokens (dark theme only)."
+  }
+}

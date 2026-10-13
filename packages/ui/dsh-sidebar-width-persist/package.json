@@ -1,0 +1,44 @@
+{
+  "name": "@gavinc-cn/dsh-sidebar-width-persist",
+  "description": "把 DSH Web GUI 左侧边栏的拖动宽度持久化到 localStorage: 刷新页面后仍是上次拖出来的宽度; 收起侧栏不丢宽度, 再展开时回到该宽度 (原生语义是回默认 280)。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.bundle.js"
+    },
+    "./package.json": {
+      "default": "./package.json"
+    },
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "scripts": {
+    "test": "node --test test/width.spec.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/ui/dsh-sidebar-width-persist"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/ui/dsh-sidebar-width-persist#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

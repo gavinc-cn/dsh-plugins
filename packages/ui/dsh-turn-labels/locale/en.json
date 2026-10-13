@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Turn label rail",
+    "description": "Replaces the right-edge turn rail with persistent labels: one line per turn showing your prompt, click to jump."
+  }
+}

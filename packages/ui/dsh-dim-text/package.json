@@ -1,0 +1,39 @@
+{
+  "name": "@gavinc-cn/dsh-dim-text",
+  "description": "把 Web GUI 文字梯度整体调暗一档: 经官方扩展点 ctx.theme.overrideTokens 覆盖 --dsw-alias-label-primary/secondary/tertiary, 仅深色模式生效。",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.bundle.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/ui/dsh-dim-text"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/ui/dsh-dim-text#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

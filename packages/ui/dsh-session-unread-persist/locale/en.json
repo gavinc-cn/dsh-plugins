@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Persistent unread dots",
+    "description": "Persists the \"completed, unread\" green dots in the session list to localStorage across reloads."
+  }
+}

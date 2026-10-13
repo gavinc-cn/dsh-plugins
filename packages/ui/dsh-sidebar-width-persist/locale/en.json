@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Remembered sidebar width",
+    "description": "Persists the sidebar drag width in localStorage; collapsing keeps the width and re-expanding restores it."
+  }
+}

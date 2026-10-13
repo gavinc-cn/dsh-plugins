@@ -1,0 +1,39 @@
+{
+  "name": "@gavinc-cn/kanban-board",
+  "description": "任务看板: 待开发/正在开发/阻塞/待审核/已完成。拖入正在开发自动创建会话由 agent 执行, 完成自动进待审核, agent 提问/请求审批自动进阻塞, 回答后自动继续。",
+  "version": "0.1.2",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.bundle.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/ui/kanban-board"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/ui/kanban-board#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

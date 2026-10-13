@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Task board",
+    "description": "Kanban board: To do / In progress / Blocked / In review / Done. Dragging a card into In progress starts an agent session; blocked items resume after your reply."
+  }
+}
