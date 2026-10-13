@@ -1,0 +1,32 @@
+{
+  "name": "@gavinc-cn/dsh-git-guard",
+  "title": "Git 归属守卫",
+  "description": "git 操作归属守卫 (kimi-code git_commit_guard hook 的 DSH 原生移植): 拦下缺 agent 前缀的 git commit、越界的 reset --soft squash / amend / branch / worktree / merge / tag / config 写操作与 checkout, 经 tools/pre-execute 返回 {kind:'deny'}。",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "scripts": {
+    "test": "node --test test/plugin.test.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/dsh-git-guard"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/dsh-git-guard#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

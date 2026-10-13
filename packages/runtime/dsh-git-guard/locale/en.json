@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Git ownership guard",
+    "description": "Denies git writes that violate ownership rules (missing agent prefix, out-of-scope squash/amend/branch/worktree/merge/tag/config/checkout)."
+  }
+}

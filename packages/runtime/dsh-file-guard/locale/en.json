@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "File drift guard",
+    "description": "At each turn end compares session-written files with disk and reports drift caused by other processes or file sync; never rewrites."
+  }
+}

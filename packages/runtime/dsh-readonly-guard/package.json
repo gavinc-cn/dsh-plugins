@@ -1,0 +1,36 @@
+{
+  "name": "@gavinc-cn/dsh-readonly-guard",
+  "description": "只读守卫: bash 命令分类为只读则放行, 可能修改系统的默认转 DSH 原生审批 (ask, 可配 deny 复刻 kimi); 沿用 kimi 的审批标记 ######USER_APPROVED###### 与 ~/.kimi-code/readonly_whitelist.json / readonly_pending.jsonl 数据格式。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    ".": "./lib/index.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/plugin.test.mjs",
+    "test:differential": "node test/differential.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "guard"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/dsh-readonly-guard"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/dsh-readonly-guard#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues"
+}

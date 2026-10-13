@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Git 归属守卫",
+    "description": "拦下缺 agent 前缀的 git commit、越界的 reset --soft squash / amend / branch / worktree / merge / tag / config 写操作与 checkout。"
+  }
+}

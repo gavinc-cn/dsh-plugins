@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Autocommit guard",
+    "description": "Blocks closing a turn with uncommitted session edits and steers the model to commit first; never commits by itself."
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@gavinc-cn/dsh-autocommit",
+  "title": "自动提交守卫",
+  "description": "自动提交守卫: 本会话改过文件却想接着跑下一回合时挡下并提示模型先提交 (agent/turn-stopping + tools/pre-execute 双触点, 经 agent.steer 强制再跑一步); 默认绝不自行提交, 仅 commitOnApproval=true 时在审批弹窗路径代提交。",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/dsh-autocommit"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/dsh-autocommit#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

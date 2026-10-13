@@ -1,0 +1,40 @@
+{
+  "name": "@gavinc-cn/dsh-memory",
+  "title": "跨会话记忆",
+  "description": "跨会话记忆插件: 会话首次提交 prompt 时注入两级记忆索引 (agent/pre-step 追加消息), 回合结束按限流提示模型回顾并写入 (agent/turn-stopping + agent.steer); 记忆根 ~/.agents/memory, 与 kimi code / DSH desktop 共用一份。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "scripts": {
+    "test": "node --test test/plugin.test.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/dsh-memory"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/dsh-memory#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "@gavinc-cn/dsh-file-guard",
+  "title": "文件漂移守卫",
+  "description": "会话文件守卫插件: 每轮收尾 (agent/turn-stopping) 比对「本会话写下的文件」与磁盘, 发现被外部进程/并行会话/文件同步覆盖或回退时 steer 一条简短提示 (不自动改回); 状态格式与 kimi 侧 file_guard.py 双向兼容, 并附带等价 CLI (note/check/report/restore/ack/forget/stop-hook)。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./core": "./lib/core.mjs",
+    "./cli": "./lib/cli.mjs",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "bin": {
+    "dsh-file-guard": "./lib/cli.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/plugin.test.mjs",
+    "test:interop": "node --test test/interop.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/dsh-file-guard"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/dsh-file-guard#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

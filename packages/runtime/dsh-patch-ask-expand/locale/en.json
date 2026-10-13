@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Expanded question row",
+    "description": "Expands the ask_user_question row by default via an idempotent text patch on the dsh-client-ui-tool bundle."
+  }
+}

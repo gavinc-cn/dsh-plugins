@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "提问行默认展开",
+    "description": "让 Web GUI 里「提问 / 回答」这一行（ask_user_question）默认展开：启动时对 dsh-client-ui-tool 的 client bundle 打一个幂等文本补丁。"
+  }
+}

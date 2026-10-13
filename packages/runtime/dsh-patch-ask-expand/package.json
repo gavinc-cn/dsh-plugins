@@ -1,0 +1,36 @@
+{
+  "name": "@gavinc-cn/dsh-patch-ask-expand",
+  "description": "让 Web GUI 里「提问 / 回答」这一行（ask_user_question）默认展开：启动时对 dsh-client-ui-tool 的 client bundle 打一个幂等文本补丁。",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.mjs"
+    },
+    "./patch": {
+      "default": "./lib/patch.mjs"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "scripts": {
+    "test": "node --test test/patch.spec.mjs test/component-render.spec.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/dsh-patch-ask-expand"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/dsh-patch-ask-expand#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

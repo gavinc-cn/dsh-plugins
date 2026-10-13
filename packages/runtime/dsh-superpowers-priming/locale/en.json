@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Superpowers priming",
+    "description": "Injects the using-superpowers preamble once when a session is resumed without it in history."
+  }
+}

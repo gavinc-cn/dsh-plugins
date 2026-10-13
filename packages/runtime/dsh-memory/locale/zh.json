@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "跨会话记忆",
+    "description": "会话首次提交 prompt 时注入两级记忆索引, 回合结束按限流提示模型回顾并写入记忆 (记忆根 ~/.agents/memory, 与 kimi code / DSH desktop 共用一份)。"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@gavinc-cn/sandbox-path-allowlist",
+  "description": "沙箱路径白名单: 对配置目录内的 write/edit 沙箱升权请求自动放行, 在 Web 弹框 answerer 之前短路 approval/request 瀑布, 用户不再收到弹框。",
+  "version": "0.1.2",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    ".": "./lib/index.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "sandbox"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/sandbox-path-allowlist"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/sandbox-path-allowlist#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues"
+}

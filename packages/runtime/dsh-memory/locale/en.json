@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Cross-session memory",
+    "description": "Injects the two-level memory index on the first prompt and reminds the model to review/write memory at turn end."
+  }
+}

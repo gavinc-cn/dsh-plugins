@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Superpowers 开场注入",
+    "description": "会话重开 (agent/created source=resume) 时, 若历史里没有 superpowers 开场说明就补注入一次 using-superpowers 全文; 已有则跳过, 避免重复占用上下文。"
+  }
+}
