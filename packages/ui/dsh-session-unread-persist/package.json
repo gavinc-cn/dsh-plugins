@@ -1,7 +1,7 @@
 {
   "name": "@gavinc-cn/dsh-session-unread-persist",
   "description": "把 Web GUI 会话列表的「已完成未查看」绿点 (uiSession.completionUnread) 持久化到 localStorage: 刷新页面、重开浏览器后绿点仍在, 点开会话后照常消失。",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "main": "lib/index.js",
   "files": [

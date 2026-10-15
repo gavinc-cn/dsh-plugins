@@ -2,7 +2,7 @@
   "name": "@gavinc-cn/dsh-file-guard",
   "title": "文件漂移守卫",
   "description": "会话文件守卫插件: 每轮收尾 (agent/turn-stopping) 比对「本会话写下的文件」与磁盘, 发现被外部进程/并行会话/文件同步覆盖或回退时 steer 一条简短提示 (不自动改回); 状态格式与 kimi 侧 file_guard.py 双向兼容, 并附带等价 CLI (note/check/report/restore/ack/forget/stop-hook)。",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "./lib/index.mjs",
   "files": [

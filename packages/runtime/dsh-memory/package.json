@@ -2,7 +2,7 @@
   "name": "@gavinc-cn/dsh-memory",
   "title": "跨会话记忆",
   "description": "跨会话记忆插件: 会话首次提交 prompt 时注入两级记忆索引 (agent/pre-step 追加消息), 回合结束按限流提示模型回顾并写入 (agent/turn-stopping + agent.steer); 记忆根 ~/.agents/memory, 与 kimi code / DSH desktop 共用一份。",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "./lib/index.mjs",
   "files": [
