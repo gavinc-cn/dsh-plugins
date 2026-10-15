@@ -8,9 +8,14 @@
 
 | 想要什么 | 装哪个 | 装完得到 |
 |---|---|---|
-| 全都要 | `@gavinc-cn/dsh-plugins` | 16 个包：13 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
-| 只要 UI 那 5 个 | `@gavinc-cn/dsh-plugins-ui` | 6 个包：5 个只作用于 Web GUI 的组件 + bundle |
-| 只要运行时那 8 个 | `@gavinc-cn/dsh-plugins-runtime` | 9 个包：8 个宿主侧组件 + bundle |
+| 全都要 | `@gavinc-cn/dsh-plugins` | 15 个包：12 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
+| 只要 UI 那 5 个 | `@gavinc-cn/dsh-plugins-ui` | 6 个包：5 个面向 Web GUI 的组件 + bundle |
+| 只要运行时那 7 个 | `@gavinc-cn/dsh-plugins-runtime` | 8 个包：7 个宿主侧组件 + bundle |
+
+> **版本说明（2026-10-16）**：`dsh-plugins-ui@0.1.1` / `dsh-plugins-runtime@0.1.1` 起 ——
+> ① `kanban-board` 不再随 UI bundle 下发；② `dsh-patch-ask-expand` 从运行时 bundle 移到 UI bundle
+> （它同时 bump 到 0.1.2），UI bundle 对 `dsh-turn-labels` 的依赖范围随之提到 `^0.6.1`
+> （`dsh-turn-labels@0.6.x` 新增「提问条目直接显示用户回答」）。上表的包数是本仓库当前代码的形态。
 
 ```bash
 npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
@@ -33,21 +38,27 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 
 ## 包里有什么
 
-### `@gavinc-cn/dsh-plugins-ui`（5 个，只作用于 Web GUI）
+### `@gavinc-cn/dsh-plugins-ui`（5 个，面向 Web GUI）
 
 | 组件 | 说明 |
 |---|---|
-| `kanban-board` | 任务看板（待开发/正在开发/阻塞/待审核/已完成）：拖进「正在开发」自动开会话交给 agent，完成自动进待审核，agent 提问或请求审批自动进阻塞 |
 | `dsh-dim-text` | 文字梯度整体调暗一档（走官方 `ctx.theme.overrideTokens` 扩展点，仅深色模式） |
 | `dsh-session-unread-persist` | 会话列表「已完成未查看」绿点持久化到 localStorage：刷新/重开浏览器后仍在，点开会话照常消失 |
-| `dsh-turn-labels` | 把右侧轮次刻度轨换成常驻文字：每轮一行显示提问，当前轮高亮，hover 预览，点击跳转 |
+| `dsh-turn-labels` | 把右侧轮次刻度轨换成常驻文字：每轮一行显示提问，当前轮高亮，hover 预览，点击跳转；提问条目直接显示用户回答（蓝色区分、hover 出完整问答，读不到回答时退回原版小横杠） |
 | `dsh-sidebar-width-persist` | 左侧边栏拖动宽度持久化：刷新后仍是上次的宽度，收起再展开不丢 |
+| `dsh-patch-ask-expand` | 让 `ask_user_question` 那一行默认展开。**本 bundle 唯一运行体在宿主侧的组件**：启动时对官方 client bundle 打幂等文本补丁（保留 `.orig` 备份，锚点对不上就跳过） |
 
-### `@gavinc-cn/dsh-plugins-runtime`（8 个，宿主侧）
+> 归属判据自 2026-10-15 起是**「面向谁」**：`dsh-patch-ask-expand` 的实现跑在宿主侧，但效果是
+> 纯 GUI 观感 ⇒ 归 UI bundle，免得只想装 UI 包的人发现不了它。
+
+> `@gavinc-cn/kanban-board`（任务看板）**不随本 bundle 下发**：包还在本仓库
+> `packages/ui/kanban-board/`、npm 上也可单独安装，但装 `dsh-plugins-ui` 不会带上它。
+> 要用就在 profile 的 `cordis.patch.yml` 里手写一条 insert（面板里不会有行/开关）。
+
+### `@gavinc-cn/dsh-plugins-runtime`（7 个，宿主侧）
 
 | 组件 | 说明 |
 |---|---|
-| `dsh-patch-ask-expand` | 让 `ask_user_question` 那一行默认展开（启动时对官方 client bundle 打幂等文本补丁） |
 | `dsh-superpowers-priming` | 会话重开时补注入一次 superpowers 开场说明；已有则跳过，避免重复占上下文 |
 | `dsh-memory` | 跨会话记忆：首次 prompt 注入两级记忆索引，回合结束按限流提示写入（记忆根 `~/.agents/memory`） |
 | `dsh-autocommit` | 自动提交守卫：本会话改过文件却要接着跑下一回合时挡下，提示模型先提交（不自行提交） |
@@ -74,9 +85,10 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 
 ```
 packages/
-  ui/          5 个只作用于 Web GUI 的组件包（声明 dsh.client.platform: "web"）
-  runtime/     8 个宿主（node）侧组件包
-  bundles/     dsh-plugins-ui（UI 5 行）/ dsh-plugins-runtime（运行时 8 行）/ dsh-plugins（聚合元包）
+  ui/          6 个面向 Web GUI 的组件包（4 个声明 dsh.client.platform: "web"；dsh-patch-ask-expand 宿主侧实现；
+              kanban-board 不随 bundle 下发）
+  runtime/     7 个宿主（node）侧组件包
+  bundles/     dsh-plugins-ui（UI 5 行）/ dsh-plugins-runtime（运行时 7 行）/ dsh-plugins（聚合元包）
 scripts/
   deploy-to-dsh.sh     把仓库铺到 dsh 实际加载的「共享活副本」~/.dsh/profiles/node_modules/@gavinc-cn/
   check-bundles.mjs    结构校验：行 id 全局唯一、行 ∈ dependencies、目录名 = 包名短名
