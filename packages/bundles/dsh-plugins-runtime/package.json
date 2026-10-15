@@ -1,7 +1,7 @@
 {
   "name": "@gavinc-cn/dsh-plugins-runtime",
-  "version": "0.1.0",
-  "description": "DSH 插件组合包（runtime bundle）：8 个 node 侧组件（记忆、git/文件守卫、只读闸门、沙箱白名单、重开会话再注入等），每个是一行独立开关；UI 组件见 @gavinc-cn/dsh-plugins-ui。",
+  "version": "0.1.1",
+  "description": "DSH 插件组合包（runtime bundle）：7 个宿主（node）侧组件（记忆、git/文件守卫、只读闸门、沙箱白名单、重开会话再注入等），每个是一行独立开关；面向 Web GUI 的组件见 @gavinc-cn/dsh-plugins-ui。",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -42,7 +42,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@gavinc-cn/dsh-patch-ask-expand": "^0.1.1",
     "@gavinc-cn/dsh-superpowers-priming": "^0.1.0",
     "@gavinc-cn/dsh-memory": "^0.1.0",
     "@gavinc-cn/dsh-autocommit": "^0.1.1",

@@ -1,7 +1,7 @@
 {
   "name": "@gavinc-cn/dsh-plugins-ui",
-  "version": "0.1.0",
-  "description": "DSH 插件组合包（UI bundle）：5 个只作用于 Web GUI 的组件，每个是一行独立开关；node/运行时组件见 @gavinc-cn/dsh-plugins-runtime。",
+  "version": "0.1.1",
+  "description": "DSH 插件组合包（UI bundle）：5 个面向 Web GUI 的组件（其中 dsh-patch-ask-expand 由宿主侧启动时给官方 client bundle 打补丁实现），每个是一行独立开关；其余宿主侧组件见 @gavinc-cn/dsh-plugins-runtime。",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -42,10 +42,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@gavinc-cn/kanban-board": "^0.1.2",
     "@gavinc-cn/dsh-dim-text": "^0.1.1",
+    "@gavinc-cn/dsh-patch-ask-expand": "^0.1.1",
     "@gavinc-cn/dsh-session-unread-persist": "^0.1.1",
-    "@gavinc-cn/dsh-turn-labels": "^0.5.2",
+    "@gavinc-cn/dsh-turn-labels": "^0.6.1",
     "@gavinc-cn/dsh-sidebar-width-persist": "^0.1.0"
   }
 }

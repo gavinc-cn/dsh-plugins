@@ -1,7 +1,11 @@
 # @gavinc-cn/dsh-plugins-runtime
 
 把**宿主（node）侧运行**的自研插件收成一个可安装单位的 bundle 包：装上它，Plugins 面板里多出
-一张「自研插件 · 运行时」卡片；卡片里的每个**组件**（组合行）= 一个**独立开关**。
+一张标题为**包名**的卡片（`@gavinc-cn/dsh-plugins-runtime`）；卡片里的每个**组件**（组合行）= 一个**独立开关**。
+
+> 标题为什么是包名：面板标题的取值链是「`locale/*.json` 的 `meta.title` → 缺省回落 `package.json`
+> 的 `name`」。本包**故意不写 `meta.title`**（2026-10-15 起），只保留 `meta.description` 供描述
+> 本地化 —— 这样卡片标题与 `@gavinc-cn/touchstone-dsh` 一样直接显示包名。
 
 - **一个包 = 面板一张卡片**：包名出现在 profile 的 `dsh.profile.bundles` 里，本包的
   `cordis.patch.yml` 就会被当作一个配置层叠加进组合树。
@@ -11,18 +15,20 @@
 
 ## 归属判据
 
-包内组件的 `package.json` 里**没有** `dsh.client` 声明 —— 即运行体在宿主（node）侧。
-声明了 `dsh.client.platform: "web"` 的纯 UI 组件在
-[@gavinc-cn/dsh-plugins-ui](../dsh-plugins-ui/README.md)（两个包合起来 = 拆分前
-`@gavinc-cn/dsh-plugins` 的全部 13 个组件）。
+包内组件都是**宿主（node）侧的运行支撑**：记忆、提交/文件/git 守卫、只读闸门、沙箱白名单、
+沙箱升权等 —— 它们的 package.json 里**没有** `dsh.client` 声明。
 
-特例：`dsh-patch-ask-expand` 的效果在 UI 上（给官方 `dsh-client-ui-tool` 的成品 client bundle
-打幂等文本补丁），但运行体在宿主侧、没有 `dsh.client` ⇒ 按判据归本包。**只装 UI 包不会得到它。**
+面向 Web GUI 的组件（含纯浏览器组件，以及 2026-10-15 从本包移出的 `dsh-patch-ask-expand`）在
+[@gavinc-cn/dsh-plugins-ui](../dsh-plugins-ui/README.md)。归属判据自 2026-10-15 起是
+**「面向谁」而不是「代码跑在哪」**：`dsh-patch-ask-expand` 的运行体确实在宿主侧（启动时对官方
+`dsh-client-ui-tool` 的 client bundle 打文本补丁），但它是纯 GUI 观感功能 ⇒ 归 UI 包，
+免得「只想装 UI 包」的人发现不了它。两个包合起来 = 拆分前 `@gavinc-cn/dsh-plugins` 的 13 个
+组件里的 12 个（`kanban-board` 不随任何 bundle 下发）。
 
 ## 安装
 
 ```bash
-# 装进某个 profile（pnpm 会把依赖里的 8 个组件包一并装上）
+# 装进某个 profile（pnpm 会把依赖里的 7 个组件包一并装上）
 dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 ```
 
@@ -33,11 +39,10 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 - 改了 `dsh.profile.bundles` 要**重启宿主**才生效（启动时读）；profile patch 层是 live 热重载，
   行级开关不需要重启。
 
-## 组件（8 个）
+## 组件（7 个）
 
 | 行 id | 包 | 做什么 |
 |---|---|---|
-| `dsh-patch-ask-expand` | `@gavinc-cn/dsh-patch-ask-expand` | 让 Web GUI 里「提问 / 回答」那一行默认展开（对官方 client bundle 打幂等文本补丁） |
 | `dsh-superpowers-priming` | `@gavinc-cn/dsh-superpowers-priming` | 给「重开的会话」补一份 superpowers 开场说明（按会话历史判重，不重复注入） |
 | `dsh-memory` | `@gavinc-cn/dsh-memory` | 跨会话记忆：首轮注入两级记忆索引，回合收尾限流提示写记忆 |
 | `dsh-autocommit` | `@gavinc-cn/dsh-autocommit` | 回合收尾时若本会话还有未提交改动，挡下并提示模型先提交 |
@@ -67,10 +72,12 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 |---|---|---|
 | `dsh-superpowers-priming` | `skillPath`（或 env `SUPERPOWERS_SKILL_PATH`） | `~/superpowers/skills/using-superpowers/SKILL.md`（文件不存在只记日志、不注入） |
 | `dsh-file-guard` | `stateRoot`（或 env `FILE_GUARD_ROOT`） | `~/.orca/file-guard` |
-| `dsh-patch-ask-expand` | `bundlePath` | `~/.dsh/profiles/node_modules/@deepseek-ai/dsh-client-ui-tool/lib/client.js` |
 | `sandbox-path-allowlist` | `paths`（数组，绝对路径）/ `allowShell` | `paths: []` = 不生效（**必须**由覆盖行给本机路径才有作用） |
 | `dsh-readonly-guard` | `enabled` / `dryRun` / `askMode` / `whitelistPath` / `pendingPath` / `logPath` | 行默认 `disabled: true`；`whitelistPath`/`pendingPath` 缺省与 kimi 共用 `~/.kimi-code/readonly_whitelist.json` / `readonly_pending.jsonl` |
 | 各组件 | `logPath` / `enabled` / `dryRun` | 日志在 `~/.kimi-code/hooks/logs/`，默认启用 |
+
+> `dsh-patch-ask-expand` 的 `bundlePath` 等可覆盖项随它一起去了 UI bundle，
+> 见 [@gavinc-cn/dsh-plugins-ui](../dsh-plugins-ui/README.md) 与它自己的 README。
 
 ## 已知限制
 

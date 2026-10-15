@@ -1,9 +1,12 @@
 # monorepo 工作区：packages/<分组>/<包> 每个目录 = 一个可独立发布的 npm 包。
 #
-# 分组只有三个（只是源码树里的组织方式，不影响 npm 包名与 dsh 的落地路径）：
-#   ui/       5 个只作用于 Web GUI 的组件包（声明 dsh.client.platform: "web"）
-#   runtime/  8 个宿主（node）侧组件包
-#   bundles/  3 个组合包：dsh-plugins-ui（UI 的 5 行）+ dsh-plugins-runtime（运行时的 8 行）
+# 分组只有三个（分组跟着「归属判据」走，由 scripts/check-bundles.mjs 判据 6 机检；
+# 不影响 npm 包名与 dsh 的落地路径 —— 落地一律是扁平的 @gavinc-cn/<包名>/）：
+#   ui/       6 个面向 Web GUI 的组件包（4 个纯浏览器组件声明 dsh.client.platform: "web"；
+#             dsh-patch-ask-expand 宿主侧打补丁但效果在 GUI，2026-10-15 从 runtime/ 移入；
+#             kanban-board 自 2026-10-15 起不随任何 bundle 下发）
+#   runtime/  7 个宿主（node）侧组件包
+#   bundles/  3 个组合包：dsh-plugins-ui（UI 的 5 行）+ dsh-plugins-runtime（运行时的 7 行）
 #             + dsh-plugins（聚合元包，0.2.0 起不再含任何配置行）
 #
 # 注意：包之间的依赖一律写**普通 semver**（如 "^0.1.0"），不要用 `workspace:` 协议 ——

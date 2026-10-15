@@ -37,8 +37,12 @@ test/            node --test 单测 + 组件渲染测试（开发用，不随包
 
 ## 安装
 
-本包**不是 bundle 型包**（未声明 `dsh.bundle`），`dsh plugin add` 只会装成普通依赖、不会加载。
-按 profile 本地插件方式安装：
+本包随 **`@gavinc-cn/dsh-plugins-ui`** bundle 下发（该包 patch 里有一条 `- id: dsh-patch-ask-expand` 行，
+在面板里就是一个开关）—— 它虽然改的是 Web GUI 的产物，但**运行体在宿主（node）侧**，所以
+「只装 UI bundle」也会带上它。
+
+本包**自身不是 bundle 型包**（未声明 `dsh.bundle`），`dsh plugin add` 只会把它装成普通依赖、不会加载。
+单独安装（不走 bundle）时按 profile 本地插件方式：
 
 1. 把包放到 `<dsh home>/profiles/node_modules/@gavinc-cn/dsh-patch-ask-expand/`；
 2. 在 `<profile>/cordis.patch.yml` 增加注册行（需要调参时在条目上加 `config:`）：

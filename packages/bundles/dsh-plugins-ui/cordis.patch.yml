@@ -1,10 +1,21 @@
 # @gavinc-cn/dsh-plugins-ui —— 「UI 组件」的组合行（2026-10-13 从 @gavinc-cn/dsh-plugins 拆出）。
 #
-# 归属判据（唯一且客观）：组件包的 package.json 里声明了 `dsh.client.platform: "web"` ——
-# 浏览器半边经 exports["./client"] 指向 lib/client.bundle.js，node 半边是空 apply()。
-# 换句话说：这些组件只在 Web GUI（容器 web 与桌面端共用同一套前端）里起作用。
-# 不满足该判据的组件（含 node 侧改 web client 产物的 dsh-patch-ask-expand）都在
-# @gavinc-cn/dsh-plugins-runtime 里，两个包合起来仍是拆分前的 13 个组件。
+# 归属判据（2026-10-15 修订）：**面向 Web GUI 的组件归本包** —— 用户视角，装 UI 包就是为了改
+# GUI 观感。其中 4 个是纯浏览器组件：package.json 里声明 `dsh.client.platform: "web"`，浏览器
+# 半边经 exports["./client"] 指向 lib/client.bundle.js，node 半边是空 apply()。
+# 另 1 个 `dsh-patch-ask-expand` 的运行体在宿主侧（没有 `dsh.client`，启动时对官方 client bundle
+# 打幂等文本补丁），但它的效果完全是 GUI 观感（提问行默认展开）⇒ 同样归本包，否则「只想装 UI 包」
+# 的人发现不了它。修订缘由与取舍见 `docs/plan-2026-10-15-ask-expand-to-ui-bundle.md`。
+# 其余宿主侧组件（记忆/守卫/沙箱白名单等）在 @gavinc-cn/dsh-plugins-runtime 里。
+# 源码树分组（packages/ui|runtime）跟着这个判据走：`packages/ui/` 下的包都在本 bundle 里，
+# 唯一例外是不随任何 bundle 下发的 `kanban-board`（见下）。
+#
+# 2026-10-15：**`kanban-board` 已从本包移除**（行与 dependencies 一并删除）。组件包本体仍留在
+# 仓库 `packages/ui/kanban-board/`（npm 上的 0.1.2 也还在），只是**不再随任何 bundle 下发**：
+# 本包因此是 5 个组件（4 个纯 UI + dsh-patch-ask-expand）。要在某个 profile 重新挂它，就在该 profile 的
+# cordis.patch.yml 里手写一条 insert（`- insert: - id: kanban-board` + name `@gavinc-cn/kanban-board`）——
+# 注意手写 insert 在 Plugins 面板里没有行、也没有开关（面板只渲染 bundle 包自带 patch 的行），
+# 且行 id 在整棵组合树里只能出现一次（见下）。
 #
 # 工作方式（与拆分前一致）：
 #   * Plugins 面板出现 @gavinc-cn/dsh-plugins-ui 卡片，卡片内每个行 = 一个组件 = 一个开关；
@@ -30,11 +41,6 @@
 # 注意：别再对 profile 跑 pnpm install —— registry 版会盖住共享活副本里那份（见仓库 README）。
 
 - insert:
-    - id: kanban-board
-      disabled: true
-      name: "@gavinc-cn/kanban-board"
-
-- insert:
     - id: dsh-dim-text
       name: "@gavinc-cn/dsh-dim-text"
 
@@ -49,3 +55,11 @@
 - insert:
     - id: dsh-sidebar-width-persist
       name: "@gavinc-cn/dsh-sidebar-width-persist"
+
+# dsh-patch-ask-expand（2026-10-15 从 runtime bundle 移入）：启动时对官方 dsh-client-ui-tool 的
+# client bundle 打幂等文本补丁，让「提问 / 回答」那一行默认展开。**它是唯一运行体在宿主侧的行**：
+# 会写官方包的源文件（保留 .orig 备份），失败只记日志、不影响 dsh 启动。
+# 行位置放在 4 个纯 UI 行之后 = 保持拆分前的相对顺序（kanban-board 移除后：4 行 UI + 本行 + runtime 7 行）。
+- insert:
+    - id: dsh-patch-ask-expand
+      name: "@gavinc-cn/dsh-patch-ask-expand"

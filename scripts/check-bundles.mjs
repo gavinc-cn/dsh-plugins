@@ -15,7 +15,11 @@
 //   2. 每个 bundle 包的 `dsh.bundle.patch` 指向的文件存在，且能解析出组件行；
 //   3. 行 id 全局唯一，且行 id = 行 name 去掉 scope；
 //   4. 每个 bundle 的 dependencies 集合 == 它的行 name 集合；
-//   5. 每个组件包（ui/ 与 runtime/ 下的包）恰好被一个 bundle 行引用。
+//   5. 每个组件包（ui/ 与 runtime/ 下的包）恰好被一个 bundle 行引用 —— 除非它被显式登记进
+//      下面的 UNBUNDLED（「故意不随任何 bundle 下发」的包）；
+//   6. 源码树分组 = bundle 归属（packages/ui/* → dsh-plugins-ui，packages/runtime/* →
+//      dsh-plugins-runtime）—— 分组自 2026-10-15 起就是「归属判据」的落地，防止搬行/搬目录时
+//      只改一半。UNBUNDLED 里的包不参与本条。
 //
 // 限制：patch 解析只认本仓库使用的块式写法（`- insert:` + 缩进的 `- id:` / `disabled:` / `name:`）。
 // 若哪天改成 flow style，请先扩展 parseInsertRows()。
@@ -27,6 +31,23 @@ import { fileURLToPath } from 'node:url'
 const REPO = fileURLToPath(new URL('..', import.meta.url))
 const PACKAGES = join(REPO, 'packages')
 const GROUPS = ['ui', 'runtime', 'bundles']
+
+// 判据 5 的豁免清单：**故意不随任何 bundle 下发**的组件包（写目录名）。
+// 为什么要有它：仓库里的包不一定都在 bundle 里 —— 包可以只留作真源、按需在 profile 里手写
+// insert 单独挂；但「没被引用」这件事必须是**显式登记**的，不能靠漏写静默通过（否则一行被
+// 误删也查不出来）。清单里的包如果又被某个 bundle 引用了，同样报错（清单过期，该删掉这行）。
+//   kanban-board：2026-10-15 从 @gavinc-cn/dsh-plugins-ui 移除（行 + dependencies），包本体留在
+//                 仓库 packages/ui/kanban-board/，npm 上的 0.1.2 也仍在。
+const UNBUNDLED = new Set(['kanban-board'])
+
+// 判据 6 的期望映射：源码树分组 → 该分组的包应归属的 bundle 包名。
+// 为什么要机检：2026-10-15 把 dsh-patch-ask-expand 从 runtime 分组搬到 ui 分组 + 从运行时 bundle
+// 搬到 UI bundle（判据从「代码跑在哪」改成「面向谁」，见 docs/plan-2026-10-15-ask-expand-to-ui-bundle.md）。
+// 那种「搬一半」的状态（目录搬了、行没搬，或反过来）此前只能靠人肉核对，现在由本条拦住。
+const GROUP_BUNDLE = {
+  ui: '@gavinc-cn/dsh-plugins-ui',
+  runtime: '@gavinc-cn/dsh-plugins-runtime',
+}
 
 const failures = []
 const fail = (msg) => failures.push(msg)
@@ -115,6 +136,8 @@ for (const pkg of packages) {
 
 // 判据 2-4：bundle 的行
 const rowOwner = new Map()
+/** 组件包短名 → 引用它的 bundle 包名（判据 6 用；只有 ui/runtime 分组的包会进这张表）。 */
+const bundleOf = new Map()
 for (const bundle of bundles) {
   const name = bundle.manifest.name
   const rel = `packages/bundles/${bundle.dirName}`
@@ -146,6 +169,7 @@ for (const bundle of bundles) {
     else rowOwner.set(row.id, rel)
     if (!deps.has(row.name)) fail(`${rel}: 行 ${row.id} 的包 ${row.name} 不在 dependencies 里`)
     if (!componentNames.has(row.name)) fail(`${rel}: 行 ${row.id} 的包 ${row.name} 在 packages/{ui,runtime}/ 里找不到`)
+    else bundleOf.set(row.id, name)
     rowNames.add(row.name)
   }
 
@@ -155,15 +179,42 @@ for (const bundle of bundles) {
   console.log(`-- ${name}: ${rows.length} 行（默认停用 ${off} 个）`)
 }
 
-// 判据 5：每个组件包恰好被一个行引用
+// 判据 5：每个组件包恰好被一个行引用（UNBUNDLED 里登记过的除外，且登记过的必须确实没被引用）
 for (const component of components) {
-  if (![...rowOwner.keys()].includes(component.dirName)) {
-    fail(`packages/${component.group}/${component.dirName}/: 没有任何 bundle 行引用它`)
+  const owner = rowOwner.get(component.dirName)
+  const exempt = UNBUNDLED.has(component.dirName)
+  if (owner === undefined && !exempt) {
+    fail(
+      `packages/${component.group}/${component.dirName}/: 没有任何 bundle 行引用它` +
+        `（若是有意不随 bundle 下发，请登记进 check-bundles.mjs 的 UNBUNDLED）`
+    )
+  }
+  if (owner !== undefined && exempt) {
+    fail(
+      `packages/${component.group}/${component.dirName}/: 已在 UNBUNDLED 里登记为「不随 bundle 下发」，` +
+        `却又被 ${owner} 引用 ⇒ 清单过期，请从 UNBUNDLED 里删掉它`
+    )
+  }
+}
+
+// 判据 6：源码树分组与 bundle 归属一致（搬行/搬目录只做一半时在这里报错）
+for (const component of components) {
+  const expected = GROUP_BUNDLE[component.group]
+  const actual = bundleOf.get(component.dirName)
+  if (expected === undefined || actual === undefined) continue
+  if (actual !== expected) {
+    fail(
+      `packages/${component.group}/${component.dirName}/: 归 ${actual}，但它在 packages/${component.group}/ 分组里` +
+        ` ⇒ 期望归 ${expected}。要么把行搬过去、要么把目录搬过去（判据见 docs/plan-2026-10-15-ask-expand-to-ui-bundle.md）`
+    )
   }
 }
 
 // 汇总
 console.log(`\n组件包 ${components.length} 个，bundle 包 ${bundles.length} 个，组件行 ${rowOwner.size} 条`)
+if (UNBUNDLED.size > 0) {
+  console.log(`-- 不随任何 bundle 下发（UNBUNDLED 显式豁免）：${[...UNBUNDLED].join(', ')}`)
+}
 if (failures.length > 0) {
   console.error(`\n✗ ${failures.length} 项不通过:`)
   for (const message of failures) console.error(`   - ${message}`)
