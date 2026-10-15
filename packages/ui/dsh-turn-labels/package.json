@@ -1,13 +1,16 @@
 {
   "name": "@gavinc-cn/dsh-turn-labels",
-  "description": "把 Web GUI 右侧的轮次刻度轨换成常驻文字: 每轮一行显示该轮用户提问, 当前轮高亮, hover 显示提问+回答预览, 点击跳转该轮; 每轮文字行下方为 ask_user_question 各加一条原版小横杠, 点击跳到该提问的位置(展开候选限定在同一会话滚动区内, 避免误点侧栏按钮)。列宽跟着正文栏宽度自适应(无下限, 文字超宽截断), 正文拉宽后不压正文。",
-  "version": "0.5.2",
+  "description": "把 Web GUI 右侧的轮次刻度轨换成常驻文字: 每轮一行显示该轮用户提问, 当前轮高亮, hover 显示提问+回答预览, 点击跳转该轮; 每个 ask_user_question 条目直接显示**用户回答**(一行一个回答, 品牌蓝 accent + 缩进到提问文字的起点, 与提问行区分, hover 出完整问答预览, 点击跳到该提问的位置), 读不到回答(未作答/整题跳过/用户折叠了那一行)时退回原版小横杠。列宽跟着正文栏宽度自适应(无下限, 文字超宽截断), 正文拉宽后不压正文。",
+  "version": "0.6.1",
   "type": "module",
   "main": "lib/index.js",
   "files": [
     "lib",
     "locale"
   ],
+  "scripts": {
+    "test": "node --test test/turn-labels.spec.mjs"
+  },
   "exports": {
     ".": {
       "default": "./lib/index.js"

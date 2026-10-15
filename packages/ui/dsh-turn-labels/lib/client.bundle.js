@@ -39,6 +39,18 @@
  *     `contentRight - flowRight` 漏减 frame 的 12px(`right:12px`)导致**恒定压住正文一条**
  *     的老 bug(真机实测 overlap 12~13px, 与正文宽度无关)。
  *     详见 doc_ai/plan/202610/20261006_0925_DSH右侧列表宽度不随正文自适应根因与修复.md。
+ *  9. **提问条目改为显示用户回答**(0.6.0)。原版每个 ask_user_question 只给一条 20x2px 小横杠;
+ *     现在只要能读到回答, 就把该条目画成**回答文字行**(品牌蓝 accent, 与用户提问行的墨色区分),
+ *     一次提问含多个问题就一行一个回答; 读不到回答(未作答/整题跳过/用户手动折叠了那一行)时
+ *     退回原版小横杠。回答的取值口径(2026-10-15 真机取证, 见 doc plan):
+ *       [data-tool="ask_user_question"] > div.bodyWrap > dl.fsXYAq_card
+ *         > div.fsXYAq_item > dt.fsXYAq_question + dd.fsXYAq_answer > span.fsXYAq_answerLine
+ *     两个必须记住的点: ① 必须用 `textContent` 读 dd —— 提问行常处在被折叠的「轮次过程」组里
+ *     (祖先带 hidden="until-found"), 此时 `innerText` 一律是空串(实测 4/4 行为空);
+ *     ② 「已跳过」占位(span 类名以 _skipped 结尾)不是回答, 要跳过它。
+ *     不走 userQuestions 投影: 它只跟踪带 timeout 的定时 schema, 本机是阻塞式 schema,
+ *     全库投影的 settled 都是空的。
+ *     详见 docs/plan-2026-10-15-turn-labels-answers.md。
  *
  * 卸载: 删 <profile>/cordis.patch.yml 里的 insert 条目(或改 disabled: true)即热卸载。
  * 调试: 控制台 window.__TURN_LABELS__ 可读投影条目、内置轨元素与几何
@@ -84,6 +96,22 @@ window.__ModuleLoader__.load({
 		const CARD_HEIGHT_PX = 108;
 		/** 提问条目(小横杠)的行高(px): 比文字行矮, 紧贴在所属轮次文字行下面。 */
 		const ASK_ROW_PX = 9;
+		/**
+		 * 回答条目(文字行)的行高(px): 比提问行(22px)矮一档, 视觉上从属于所属轮次;
+		 * 12px 字 + 上下各 3px 呼吸, 不会被行内裁切。
+		 */
+		const ANSWER_ROW_PX = 18;
+		/**
+		 * 回答文字的左缩进(px): 提问文字前面是「2px 高亮条 + 6px 间距」= 8px, 取同一个值,
+		 * 蓝色回答就正好从白色提问文字的起点开始 —— 不会比用户输入更靠左(0.6.1,
+		 * 2026-10-15 用户要求: 蓝色回答要缩进, 不要超过白色的用户输入)。
+		 * 改提问行行首那根条的宽度/间距时要同步改这里(单测按量出来的值断言)。
+		 */
+		const ANSWER_INDENT_PX = 8;
+		/** 预览卡里最多显示几组问答: 卡片不可滚动(pointerEvents:none), 再多就吃掉正文。 */
+		const CARD_MAX_PAIRS = 3;
+		/** 问答预览卡的最大高度(px): 超出部分裁掉, 保证卡片不盖住正文。 */
+		const CARD_MAX_HEIGHT_PX = 260;
 		/** 小横杠尺寸与默认缩放, 与内置轨原版一致(20x2px, 右对齐, 默认 scaleX(.6))。 */
 		const ASK_BAR_WIDTH_PX = 20;
 		const ASK_BAR_HEIGHT_PX = 2;
@@ -107,6 +135,11 @@ window.__ModuleLoader__.load({
 			/** 小横杠: 平时用内置轨那支 border-l4, hover 时提亮成 tertiary(与内置轨 hover 语义一致)。 */
 			bar: "var(--dsw-alias-border-l4, rgba(255,255,255,.24))",
 			barHover: "var(--dsw-alias-label-tertiary, #adb2b8)",
+			/**
+			 * 回答文字: 只用颜色与用户提问行区分(2026-10-15 用户拍板), 取品牌蓝(业务态主色);
+			 * 深色下是 --dsw-static-deepseek-400(#7aaaff), 缺失时退回它。
+			 */
+			answer: "var(--dsw-alias-state-business-primary, #7aaaff)",
 			caption: "var(--dsw-alias-label-caption, var(--dsw-alias-label-tertiary, #adb2b8))",
 			hover: "var(--dsw-alias-interactive-bg-hover, rgba(255,255,255,.08))",
 			cardBg: "var(--dsw-alias-bg-layer-1, #232324)",
@@ -485,13 +518,49 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * 从一条提问行里读用户回答(0.6.0)。
+		 *
+		 * 官方 AskQuestionCard 把每条问答渲染成一组 dt(问题) + dd(回答), 所以按 dd 取即可:
+		 *   [data-tool="ask_user_question"] > div.bodyWrap > dl.fsXYAq_card
+		 *     > div.fsXYAq_item > dt.fsXYAq_question + dd.fsXYAq_answer > span.fsXYAq_answerLine
+		 *
+		 * 三个必须注意的点(2026-10-15 真机取证, 见 docs/plan-2026-10-15-turn-labels-answers.md):
+		 *  1. **用 textContent 不用 innerText**。提问行常处在被折叠的「轮次过程」组里(祖先带
+		 *     hidden="until-found"), 此时 innerText 对隐藏子树一律返回空串 —— 实测同一条会话里
+		 *     4/4 行都是空, textContent 才拿得到原文。
+		 *  2. 「已跳过」不是回答: 该题没答时官方在同一位置渲染一个占位 span(类名以 _skipped 结尾,
+		 *     文案随 locale), 记下来会让"跳过"看起来像用户答过。
+		 *  3. 答案卡只在该提问行**展开时**才被渲染(官方是 `open && children`; 用户手动点过收起、
+		 *     或上游改了结构就没了)。这时返回空数组, 调用方退回原版小横杠。
+		 *
+		 * 类名里的哈希前缀(如 fsXYAq_)随构建变, 所以只按**后缀**认跳过占位。
+		 * @param {Element} row - [data-tool="ask_user_question"] 行。
+		 * @returns {{question: string, answer: string}[]} 每一组问答; 读不到时返回空数组。
+		 */
+		function readAskCard(row) {
+			const out = [];
+			for (const answerCell of row.querySelectorAll("dl dd")) {
+				const answer = (answerCell.textContent ?? "").trim();
+				if (answer === "") continue;
+				if (answerCell.querySelector('[class*="_skipped"]') !== null) continue;
+				const questionCell = answerCell.previousElementSibling;
+				out.push({
+					question: questionCell === null || questionCell === undefined ? "" : (questionCell.textContent ?? "").trim(),
+					answer,
+				});
+			}
+			return out;
+		}
+
+		/**
 		 * 从 DOM 里找出当前已加载窗口内的所有「提问」行, 归到各自的轮次。
 		 * 为什么用 DOM 而不是投影: 提问属于工具调用, `turnOutline` 投影里只有每轮的提问/回答文本,
 	 * 没有工具调用信息; 而提问行自身带 `data-tool="ask_user_question"`, 外层 `ztWv_q_callRow`
 	 * 带 `data-chat-call-id`(稳定 callId), 祖先带 `data-chat-turn`(轮次号), 直接够用。
 		 * 注意: 折叠中的行仍然是 DOM 的一部分(`hidden="until-found"`), 虚拟化移出窗口的行则不在,
 		 * 所以条目只覆盖"已加载窗口", 属预期行为。
-		 * @returns {{callId: string, turn: number}[]} 按轮次升序的提问条目。
+		 * @returns {{callId: string, turn: number, card: {question: string, answer: string}[]}[]}
+		 *          按轮次升序的提问条目; card 是该条的问答(读不到时为空数组)。
 		 */
 		function findAsksInDom() {
 			const out = [];
@@ -503,7 +572,7 @@ window.__ModuleLoader__.load({
 				const turn = turnHost === null ? Number.NaN : Number(turnHost.getAttribute("data-chat-turn"));
 				if (callId === null || !Number.isInteger(turn) || seen.has(callId)) continue;
 				seen.add(callId);
-				out.push({ callId, turn });
+				out.push({ callId, turn, card: readAskCard(row) });
 			}
 			out.sort((left, right) => left.turn - right.turn);
 			return out;
@@ -511,7 +580,9 @@ window.__ModuleLoader__.load({
 
 		/**
 		 * 轮询 DOM 里的提问条目(与几何轮询同频), 内容不变时不触发重渲染。
-		 * @returns {{callId: string, turn: number}[]} 提问条目。
+		 * 指纹里带上回答文本(0.6.0): 用户作答、或那一行被展开/收起导致答案卡出现或消失时,
+		 * 都要当拍换掉渲染结果 —— 只按 turn:callId 记指纹会让回答永远刷不出来。
+		 * @returns {{callId: string, turn: number, card: {question: string, answer: string}[]}[]} 提问条目。
 		 */
 		function useAskEntries() {
 			const [asks, setAsks] = React.useState([]);
@@ -521,7 +592,9 @@ window.__ModuleLoader__.load({
 				const scan = () => {
 					if (stopped) return;
 					const next = findAsksInDom();
-					const key = next.map((ask) => `${ask.turn}:${ask.callId}`).join("|");
+					const key = next
+						.map((ask) => `${ask.turn}:${ask.callId}:${ask.card.map((item) => item.answer).join("\u0001")}`)
+						.join("|");
 					if (key === lastKey) return;
 					lastKey = key;
 					setAsks(next);
@@ -692,11 +765,20 @@ window.__ModuleLoader__.load({
 
 				const scrollerRef = React.useRef(null);
 				const [hover, setHover] = React.useState(null);
+				/** 提问条目(小横杠或回答行)的 hover 态: {callId, top} —— top 用于把预览卡夹在可视范围内。 */
 				const [hoverAsk, setHoverAsk] = React.useState(null);
 				const [activeIndex, setActiveIndex] = React.useState(-1);
 				const [scrollState, setScrollState] = React.useState({ over: false, top: true, bottom: true });
 				// 已加载窗口里的「提问」条目(每轮可能有多个), 与几何轮询同频刷新。
 				const asks = useAskEntries();
+				/**
+				 * 提问条目占的总高度(px): 回答文字行 ANSWER_ROW_PX, 兜底小横杠 ASK_ROW_PX(0.6.0)。
+				 * 放在所有 effect 之前算 —— 下面几个 effect 的依赖数组要用它, 写在其后会踩 TDZ。
+				 */
+				const asksHeight = asks.reduce(
+					(sum, ask) => sum + (ask.card.length === 0 ? ASK_ROW_PX : ask.card.length * ANSWER_ROW_PX),
+					0,
+				);
 
 				/** 量一次滚动状态: 是否溢出、是否已到顶/到底(决定要不要渐隐、淡哪一侧)。 */
 				const measureScroll = React.useCallback(() => {
@@ -709,9 +791,10 @@ window.__ModuleLoader__.load({
 				}, []);
 
 				// 行数/可用高度变化后重新判定是否溢出(否则短列表也会被渐隐吃掉首尾两行)。
+				// asksHeight 放进来是因为 0.6.0 起提问条目的高度不再恒等于 asks.length * 9px。
 				React.useEffect(() => {
 					measureScroll();
-				}, [measureScroll, entries.length, rail === null ? 0 : rail.maxHeight]);
+				}, [measureScroll, entries.length, asksHeight, rail === null ? 0 : rail.maxHeight]);
 
 				// 列自身尺寸变化(输入框变高、字号/缩放变化、可用高度被改)也要重新判定,
 				// 否则可能停留在旧判断上: 该淡的不淡, 或短列表被误淡。
@@ -723,7 +806,7 @@ window.__ModuleLoader__.load({
 					});
 					observer.observe(scroller);
 					return () => observer.disconnect();
-				}, [measureScroll, entries.length, rail === null ? 0 : rail.maxHeight]);
+				}, [measureScroll, entries.length, asksHeight, rail === null ? 0 : rail.maxHeight]);
 
 				// 当前轮高亮: 内置轨跟随滚动更新 active mark, 这里用同频轮询同步过来。
 				// 内置轨缺席 = 会话只有 1 轮(见 readRailFallbackGeometry), 那一轮就是当前轮。
@@ -774,6 +857,124 @@ window.__ModuleLoader__.load({
 					index: event.currentTarget.dataset.labelIndex === undefined ? -1 : Number(event.currentTarget.dataset.labelIndex),
 					top: event.currentTarget.offsetTop - (scrollerRef.current === null ? 0 : scrollerRef.current.scrollTop),
 				});
+
+				/** 提问条目 hover 的处理器: 记下 callId 与该行相对列顶的偏移(预览卡靠它定位)。 */
+				const onAskEnter = (callId) => (event) =>
+					setHoverAsk({
+						callId,
+						top: event.currentTarget.offsetTop - (scrollerRef.current === null ? 0 : scrollerRef.current.scrollTop),
+					});
+
+				/**
+				 * 画一条提问条目: 读得到回答就画成回答文字行(每个回答一行), 否则画回原版小横杠。
+				 * 两种形态共用一个 click 处理器 —— 「跳到该轮 + 把该提问行露出来」的行为完全一致。
+				 * @param {object} ask - findAsksInDom 的条目。
+				 * @returns {object[]} 该条目的行元素(0.6.0 起可能是一行以上)。
+				 */
+				const askRows = (ask) => {
+					const onEnter = onAskEnter(ask.callId);
+					const hovered = hoverAsk !== null && hoverAsk.callId === ask.callId;
+					const click = () => {
+						const turnIndex = entries.findIndex((candidate) => Number(candidate?.turn) === ask.turn);
+						if (nav !== null && turnIndex >= 0) jumpToTurn(nav, turnIndex);
+						void revealAskRow(ask.callId, ask.turn);
+					};
+					if (ask.card.length === 0) {
+						// 兜底: 读不到回答(未作答 / 整题跳过 / 用户把提问行折叠了) -> 原版 20x2px 小横杠。
+						return [
+							h(
+								"button",
+								{
+									key: `ask-${ask.callId}`,
+									type: "button",
+									"data-ask-call-id": ask.callId,
+									"data-ask-kind": "bar",
+									"aria-label": `跳转到第 ${ask.turn} 轮的提问`,
+									onMouseEnter: onEnter,
+									onMouseLeave: () => setHoverAsk(null),
+									onClick: click,
+									style: {
+										display: "flex",
+										alignItems: "center",
+										justifyContent: "flex-end",
+										flex: "0 0 auto",
+										width: "100%",
+										height: `${ASK_ROW_PX}px`,
+										padding: "0 4px 0 0",
+										border: 0,
+										background: "transparent",
+										cursor: "pointer",
+										pointerEvents: "auto",
+									},
+								},
+								h("span", {
+									style: {
+										width: `${ASK_BAR_WIDTH_PX}px`,
+										height: `${ASK_BAR_HEIGHT_PX}px`,
+										borderRadius: "2px",
+										background: hovered ? TK.barHover : TK.bar,
+										transform: `scaleX(${hovered ? 1 : ASK_BAR_SCALE})`,
+										transformOrigin: "100% 50%",
+										transition: "transform .14s, background-color .14s",
+									},
+								}),
+							),
+						];
+					}
+					// 有回答: 每个回答一行文字(品牌蓝 accent), 与用户提问行的墨色区分;
+					// 列窄时与提问行同一规则截断, 全文在 hover 预览卡里看。
+					return ask.card.map((item, answerIndex) =>
+						h(
+							"button",
+							{
+								key: `ask-${ask.callId}-${answerIndex}`,
+								type: "button",
+								"data-ask-call-id": ask.callId,
+								"data-ask-kind": "answer",
+								"data-ask-answer": String(answerIndex),
+								"aria-label": `跳转到第 ${ask.turn} 轮的回答: ${item.answer}`,
+								onMouseEnter: onEnter,
+								onMouseLeave: () => setHoverAsk(null),
+								onClick: click,
+								style: {
+									display: "flex",
+									alignItems: "center",
+									flex: "0 0 auto",
+									width: "100%",
+									height: `${ANSWER_ROW_PX}px`,
+									boxSizing: "border-box",
+									// 左缩进写成 paddingLeft 长写(不用 padding 简写): 单测要直接量这个值。
+									paddingTop: 0,
+									paddingRight: "4px",
+									paddingBottom: 0,
+									paddingLeft: `${ANSWER_INDENT_PX}px`,
+									border: 0,
+									borderRadius: "4px",
+									background: hovered ? TK.hover : "transparent",
+									color: TK.answer,
+									font: TK.font,
+									textAlign: "left",
+									cursor: "pointer",
+									overflow: "hidden",
+									pointerEvents: "auto",
+								},
+							},
+							h(
+								"span",
+								{
+									style: {
+										flex: "1 1 auto",
+										minWidth: 0,
+										whiteSpace: "nowrap",
+										overflow: "hidden",
+										textOverflow: "ellipsis",
+									},
+								},
+								item.answer,
+							),
+						),
+					);
+				};
 
 				const rows = entries.map((entry, index) => {
 					const active = index === activeIndex;
@@ -840,8 +1041,9 @@ window.__ModuleLoader__.load({
 						),
 					);
 					if (turnAsks.length === 0) return rowButton;
-					// 该轮有提问: 文字行下面紧挨着排小横杠(原版 20x2px, 右对齐, 默认 scaleX(.6)),
-					// 每行 9px, 同一轮多个提问依次往下。点击 = 跳到该轮并把提问行露出来、滚到中央。
+					// 该轮有提问: 文字行下面紧挨着排提问条目(0.6.0 起: 有回答就是回答文字行,
+					// 读不到回答才回到原版 20x2px 小横杠), 同一轮多个提问依次往下。
+					// 点击 = 跳到该轮并把提问行露出来、滚到中央。
 					return h(
 						"div",
 						{
@@ -852,63 +1054,27 @@ window.__ModuleLoader__.load({
 								flexDirection: "column",
 								flex: "0 0 auto",
 								width: "100%",
-								// 容器自身不吃指针, 空白处仍穿透到正文; 小横杠按钮自己开 pointerEvents。
+								// 容器自身不吃指针, 空白处仍穿透到正文; 条目按钮自己开 pointerEvents。
 								pointerEvents: "none",
 							},
 						},
 						rowButton,
-						turnAsks.map((ask) =>
-							h(
-								"button",
-								{
-									key: `ask-${ask.callId}`,
-									type: "button",
-									"data-ask-call-id": ask.callId,
-									"aria-label": `跳转到第 ${ask.turn} 轮的提问`,
-									onMouseEnter: () => setHoverAsk(ask.callId),
-									onMouseLeave: () => setHoverAsk(null),
-									onClick: () => {
-										const turnIndex = entries.findIndex((candidate) => Number(candidate?.turn) === ask.turn);
-										if (nav !== null && turnIndex >= 0) jumpToTurn(nav, turnIndex);
-										void revealAskRow(ask.callId, ask.turn);
-									},
-									style: {
-										display: "flex",
-										alignItems: "center",
-										justifyContent: "flex-end",
-										flex: "0 0 auto",
-										width: "100%",
-										height: `${ASK_ROW_PX}px`,
-										padding: "0 4px 0 0",
-										border: 0,
-										background: "transparent",
-										cursor: "pointer",
-										pointerEvents: "auto",
-									},
-								},
-								h("span", {
-									style: {
-										width: `${ASK_BAR_WIDTH_PX}px`,
-										height: `${ASK_BAR_HEIGHT_PX}px`,
-										borderRadius: "2px",
-										background: hoverAsk === ask.callId ? TK.barHover : TK.bar,
-										transform: `scaleX(${hoverAsk === ask.callId ? 1 : ASK_BAR_SCALE})`,
-										transformOrigin: "100% 50%",
-										transition: "transform .14s, background-color .14s",
-									},
-								}),
-							),
-						),
+						turnAsks.flatMap((ask) => askRows(ask)),
 					);
 				});
 
-				const hostHeight = Math.min(entries.length * ROW_PX + asks.length * ASK_ROW_PX, rail.maxHeight);
+				// 提问条目的行高按各自的形态累加: 回答文字行 18px, 兜底小横杠 9px(0.6.0)。
+				const hostHeight = Math.min(entries.length * ROW_PX + asksHeight, rail.maxHeight);
 				const mask = edgeMask(scrollState);
 				const hoveredEntry = hover === null ? undefined : entries[hover.index];
-				const card =
-					hoveredEntry === undefined
+				/** 正在 hover 的提问条目(小横杠或回答行): 预览卡改显示它的完整问答(0.6.0)。 */
+				const hoveredAsk =
+					hoverAsk === null || hoverAsk === undefined
 						? null
-						: h(
+						: asks.find((ask) => ask.callId === hoverAsk.callId) ?? null;
+				const card =
+					hoveredEntry !== undefined
+						? h(
 								"div",
 								{
 									style: {
@@ -956,7 +1122,69 @@ window.__ModuleLoader__.load({
 											hoveredEntry.response,
 										)
 									: null,
-							);
+							)
+						: hoveredAsk === null || hoveredAsk.card.length === 0
+							? null
+							: h(
+									"div",
+									{
+										// 回答行的预览卡: 完整问答(列表里那一行会被省略号截断, 这里给全文)。
+										// 卡片不可滚动(pointerEvents:none), 所以限高 + 只显示前 CARD_MAX_PAIRS 组。
+										"data-ask-card": hoveredAsk.callId,
+										style: {
+											position: "absolute",
+											right: `calc(100% + 12px)`,
+											top: `${Math.max(0, Math.min(hoverAsk.top - 6, hostHeight - CARD_HEIGHT_PX))}px`,
+											width: "min(300px, 40vw)",
+											maxHeight: `${CARD_MAX_HEIGHT_PX}px`,
+											boxSizing: "border-box",
+											padding: "10px 12px",
+											borderRadius: TK.radius,
+											background: TK.cardBg,
+											color: TK.text,
+											boxShadow: TK.shadow,
+											pointerEvents: "none",
+											overflow: "hidden",
+										},
+									},
+									hoveredAsk.card.slice(0, CARD_MAX_PAIRS).map((item, pairIndex) =>
+										h(
+											"div",
+											{ key: `${hoveredAsk.callId}-${pairIndex}`, style: { marginTop: pairIndex === 0 ? 0 : "8px" } },
+											item.question === ""
+												? null
+												: h(
+														"div",
+														{
+															style: {
+																color: TK.caption,
+																font: TK.font,
+																display: "-webkit-box",
+																WebkitLineClamp: 2,
+																WebkitBoxOrient: "vertical",
+																overflow: "hidden",
+															},
+														},
+														item.question,
+													),
+											h(
+												"div",
+												{
+													style: {
+														marginTop: item.question === "" ? 0 : "2px",
+														color: TK.answer,
+														font: TK.font,
+														whiteSpace: "pre-wrap",
+														overflowWrap: "anywhere",
+														maxHeight: "72px",
+														overflow: "hidden",
+													},
+												},
+												item.answer,
+											),
+										),
+									),
+								);
 
 				return h(
 					"div",
@@ -1021,7 +1249,7 @@ window.__ModuleLoader__.load({
 			//          / .revealTrace() / .geometry() / .contentRight()
 			if (typeof window !== "undefined") {
 				window.__TURN_LABELS__ = {
-					version: "0.5.0",
+					version: "0.6.1",
 					entries: () => store.getSnapshot(),
 					rail: () => findRailNav(),
 					/** 内置轨缺席时用的等价几何(单轮会话); 有内置轨时返回 null, 不影响它。 */
@@ -1030,7 +1258,7 @@ window.__ModuleLoader__.load({
 					geometry: () => lastRailGeometry,
 					/** 实时量的正文栏右缘(px, 视口坐标); 文字列宽度 = 轨道右缘 - 它。 */
 					contentRight: () => readContentRight(),
-					/** 当前已加载窗口里的提问条目(轮次 + callId)。 */
+					/** 当前已加载窗口里的提问条目(轮次 + callId + 读到的问答 card)。 */
 					asks: () => findAsksInDom(),
 					/** 最近一次"点击小横杠 -> 揭示提问行"的过程轨迹。 */
 					revealTrace: () => revealTrace.slice(-12),
