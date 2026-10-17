@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Path rules guard",
+    "description": "Read/write inside the session workspace; reads outside allowed, writes outside require approval; allowlist bypasses; denylist always asks."
+  }
+}
