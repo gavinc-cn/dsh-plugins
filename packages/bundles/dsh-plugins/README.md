@@ -9,17 +9,19 @@
 | `0.2.0` 起 | 聚合元包：13 个组件拆成两个 bundle，本包只把它们一起装上 |
 
 （拆分时是 UI 5 个 / 运行时 8 个；2026-10-15 `kanban-board` 移出 UI bundle 后两个 bundle
-合计 12 个；同日 `dsh-patch-ask-expand` 从运行时 bundle 移到 UI bundle ⇒ 现在是 UI 5 个 /
-运行时 7 个，合计仍是 12 个。）
+合计 12 个；同日 `dsh-patch-ask-expand` 从运行时 bundle 移到 UI bundle ⇒ UI 5 个 / 运行时 7 个，
+合计仍是 12 个；2026-10-17 运行时 bundle 新增 `dsh-path-rules`、同时退役 `sandbox-path-allowlist`
+⇒ 仍是 UI 5 个 / 运行时 7 个，合计 **12 个**。）
 
 ## 拆分后的两个 bundle
 
 | 包 | 组件数 | 判据 | 面板卡片 |
 |---|---|---|---|
 | [@gavinc-cn/dsh-plugins-ui](../dsh-plugins-ui/README.md) | 5 | **面向 Web GUI**：4 个纯浏览器组件（声明 `dsh.client.platform: "web"`）+ `dsh-patch-ask-expand`（宿主侧启动时给官方 client bundle 打补丁，效果也是 GUI 观感） | 标题 = 包名 `@gavinc-cn/dsh-plugins-ui` |
-| [@gavinc-cn/dsh-plugins-runtime](../dsh-plugins-runtime/README.md) | 7 | 宿主（node）侧的运行支撑组件（记忆/守卫/沙箱等），没有 `dsh.client` | 标题 = 包名 `@gavinc-cn/dsh-plugins-runtime` |
+| [@gavinc-cn/dsh-plugins-runtime](../dsh-plugins-runtime/README.md) | 7 | 宿主（node）侧的运行支撑组件（记忆/守卫/路径规则闸门等），没有 `dsh.client` | 标题 = 包名 `@gavinc-cn/dsh-plugins-runtime` |
 
-两个包合起来 = 拆分前 `0.1.x` 的 13 个组件减去不随 bundle 下发的 `kanban-board`，即 **12 个**；
+两个包合起来 = **12 行**；`kanban-board` 与 `sandbox-path-allowlist`（后者 2026-10-17 由
+`dsh-path-rules` 合并退役）不随任何 bundle 下发，仍留在仓库作回滚真源。
 行 id 与相对顺序都没变 ⇒ 各 profile 的覆盖行原样继续命中（`dsh-patch-ask-expand` 从 runtime
 移到 UI 时也是如此，**profile 无需改动**）。
 
