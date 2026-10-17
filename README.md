@@ -1,6 +1,6 @@
 # dsh-plugins —— @gavinc-cn 的 DSH 插件集
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**13 个组件包** +
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**14 个组件包** +
 **2 个 bundle** + **1 个聚合元包**。本仓库是这些插件源码的真源，npm 上的包由这里的
 `packages/<分组>/<包>/` 逐个发布。
 
@@ -12,6 +12,12 @@
 | 只要 UI 那 5 个 | `@gavinc-cn/dsh-plugins-ui` | 6 个包：5 个面向 Web GUI 的组件 + bundle |
 | 只要运行时那 7 个 | `@gavinc-cn/dsh-plugins-runtime` | 8 个包：7 个宿主侧组件 + bundle |
 
+> **版本说明（2026-10-18）**：`dsh-plugins-runtime@0.1.2` / `dsh-plugins@0.2.2` 起，新增组件包
+> `dsh-path-rules@0.1.0`（首发）—— ① 运行时 bundle 用 `dsh-path-rules`（第五权限模式「路径规则」的
+> 逐调用闸门）替换职责重叠的 `sandbox-path-allowlist`，后者**合并退役**：行与依赖移除，包本体仍留在
+> 仓库 `packages/runtime/sandbox-path-allowlist/` 作回滚真源、npm 上也可单独安装；② 随 bundle 下发的
+> 组件仍是 12 个（UI 5 + 运行时 7），上表包数不变。
+>
 > **版本说明（2026-10-16）**：`dsh-plugins-ui@0.1.1` / `dsh-plugins-runtime@0.1.1` 起 ——
 > ① `kanban-board` 不再随 UI bundle 下发；② `dsh-patch-ask-expand` 从运行时 bundle 移到 UI bundle
 > （它同时 bump 到 0.1.2），UI bundle 对 `dsh-turn-labels` 的依赖范围随之提到 `^0.6.1`
@@ -64,7 +70,7 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 | `dsh-autocommit` | 自动提交守卫：本会话改过文件却要接着跑下一回合时挡下，提示模型先提交（不自行提交） |
 | `dsh-git-guard` | git 归属守卫：拦下缺 agent 前缀的 commit、越界的 reset/amend/branch/worktree/merge/tag/config 等写操作 |
 | `dsh-file-guard` | 文件漂移守卫：每轮收尾比对「本会话写过的文件」与磁盘，发现被外部覆盖/回退时提示（不自动改回） |
-| `sandbox-path-allowlist` | 沙箱路径白名单：配置目录内的 write/edit 升权请求自动放行，不再弹框（默认 `paths` 为空 = 空转） |
+| `dsh-path-rules` | 第五权限模式「路径规则」的逐调用闸门：项目内可读写 / 项目外读允许·写审批 / 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行；只在预设身份为 `path-rules` 时介入（2026-10-17 起承接退役的 `sandbox-path-allowlist` 白名单能力） |
 | `dsh-readonly-guard` | 只读守卫：bash 只读命令放行，可能改系统的默认转 DSH 原生审批；**默认停用** |
 
 ### `@gavinc-cn/dsh-plugins`（聚合元包）
@@ -87,7 +93,7 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 packages/
   ui/          6 个面向 Web GUI 的组件包（4 个声明 dsh.client.platform: "web"；dsh-patch-ask-expand 宿主侧实现；
               kanban-board 不随 bundle 下发）
-  runtime/     7 个宿主（node）侧组件包
+  runtime/     8 个宿主（node）侧组件包（sandbox-path-allowlist 不随 bundle 下发）
   bundles/     dsh-plugins-ui（UI 5 行）/ dsh-plugins-runtime（运行时 7 行）/ dsh-plugins（聚合元包）
 scripts/
   deploy-to-dsh.sh     把仓库铺到 dsh 实际加载的「共享活副本」~/.dsh/profiles/node_modules/@gavinc-cn/
@@ -120,7 +126,8 @@ bash scripts/deploy-to-dsh.sh                # 铺到共享活副本（patch 层
 
 ## 发布
 
-顺序有硬依赖：**13 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败）。
+顺序有硬依赖：**14 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败；
+其中 `dsh-readonly-guard` 与 `dsh-path-rules` 必须先于运行时 bundle 上 registry）。
 
 ```bash
 npm publish <tarball> --registry=https://registry.npmjs.org --access public
