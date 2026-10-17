@@ -38,7 +38,10 @@ const GROUPS = ['ui', 'runtime', 'bundles']
 // 误删也查不出来）。清单里的包如果又被某个 bundle 引用了，同样报错（清单过期，该删掉这行）。
 //   kanban-board：2026-10-15 从 @gavinc-cn/dsh-plugins-ui 移除（行 + dependencies），包本体留在
 //                 仓库 packages/ui/kanban-board/，npm 上的 0.1.2 也仍在。
-const UNBUNDLED = new Set(['kanban-board'])
+//   sandbox-path-allowlist：2026-10-17 由 @gavinc-cn/dsh-path-rules **合并退役**（行 + dependencies
+//                 移除，白名单能力由新插件的 approval/request 监听等价承接）；包本体留在
+//                 packages/runtime/sandbox-path-allowlist/ 作回滚真源（spec §8 回滚 3）。
+const UNBUNDLED = new Set(['kanban-board', 'sandbox-path-allowlist'])
 
 // 判据 6 的期望映射：源码树分组 → 该分组的包应归属的 bundle 包名。
 // 为什么要机检：2026-10-15 把 dsh-patch-ask-expand 从 runtime 分组搬到 ui 分组 + 从运行时 bundle

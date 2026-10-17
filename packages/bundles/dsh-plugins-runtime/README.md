@@ -15,15 +15,16 @@
 
 ## 归属判据
 
-包内组件都是**宿主（node）侧的运行支撑**：记忆、提交/文件/git 守卫、只读闸门、沙箱白名单、
+包内组件都是**宿主（node）侧的运行支撑**：记忆、提交/文件/git 守卫、只读闸门、路径规则闸门、
 沙箱升权等 —— 它们的 package.json 里**没有** `dsh.client` 声明。
 
 面向 Web GUI 的组件（含纯浏览器组件，以及 2026-10-15 从本包移出的 `dsh-patch-ask-expand`）在
 [@gavinc-cn/dsh-plugins-ui](../dsh-plugins-ui/README.md)。归属判据自 2026-10-15 起是
 **「面向谁」而不是「代码跑在哪」**：`dsh-patch-ask-expand` 的运行体确实在宿主侧（启动时对官方
 `dsh-client-ui-tool` 的 client bundle 打文本补丁），但它是纯 GUI 观感功能 ⇒ 归 UI 包，
-免得「只想装 UI 包」的人发现不了它。两个包合起来 = 拆分前 `@gavinc-cn/dsh-plugins` 的 13 个
-组件里的 12 个（`kanban-board` 不随任何 bundle 下发）。
+免得「只想装 UI 包」的人发现不了它。两个包合起来 = **12 行**（UI 5 + 本包 7）。
+`kanban-board` 与 `sandbox-path-allowlist` 不随任何 bundle 下发（后者 2026-10-17 由
+`dsh-path-rules` 合并退役，白名单能力由它的 `approval/request` 监听承接）。
 
 ## 安装
 
@@ -48,7 +49,7 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 | `dsh-autocommit` | `@gavinc-cn/dsh-autocommit` | 回合收尾时若本会话还有未提交改动，挡下并提示模型先提交 |
 | `dsh-git-guard` | `@gavinc-cn/dsh-git-guard` | git 操作归属守卫（按提交前缀/分支命名判定，拦下越权 git 写操作） |
 | `dsh-file-guard` | `@gavinc-cn/dsh-file-guard` | 回合收尾比对「本会话写下的文件」与磁盘漂移，只报告不自动改回 |
-| `sandbox-path-allowlist` | `@gavinc-cn/sandbox-path-allowlist` | 沙箱升权白名单：配置目录内的 write/edit 升权请求自动放行（默认 `paths` 为空 = 空转，靠 profile 覆盖行给本机路径） |
+| `dsh-path-rules` | `@gavinc-cn/dsh-path-rules` | 第五权限模式「路径规则」的逐调用闸门：项目内可读写 / 项目外读允许·写审批 / 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行。**只在预设身份为 `path-rules` 时介入**，其余四档完全空转（2026-10-17 起，承接退役的 `sandbox-path-allowlist` 白名单能力） |
 | `dsh-readonly-guard` | `@gavinc-cn/dsh-readonly-guard` | bash 只读闸门：只读命令放行，可能改系统的转 DSH 原生审批。包内默认 `disabled: true` |
 
 行 id 的约定是**包名去掉 scope**（`@gavinc-cn/dsh-memory` → `dsh-memory`）：profile 覆盖行按它命中，
@@ -72,7 +73,7 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 |---|---|---|
 | `dsh-superpowers-priming` | `skillPath`（或 env `SUPERPOWERS_SKILL_PATH`） | `~/superpowers/skills/using-superpowers/SKILL.md`（文件不存在只记日志、不注入） |
 | `dsh-file-guard` | `stateRoot`（或 env `FILE_GUARD_ROOT`） | `~/.orca/file-guard` |
-| `sandbox-path-allowlist` | `paths`（数组，绝对路径）/ `allowShell` | `paths: []` = 不生效（**必须**由覆盖行给本机路径才有作用） |
+| `dsh-path-rules` | `whitelist` / `blacklist`（绝对路径数组）、`activationPreset`、`unanalyzable`、`failMode`、`dryRun`、`logPath` | 白/黑名单默认 `[]`（只按项目内/外判定）；`activationPreset: path-rules`、`unanalyzable: deny`、`failMode: closed`、`allowTempRoots: true` |
 | `dsh-readonly-guard` | `enabled` / `dryRun` / `askMode` / `whitelistPath` / `pendingPath` / `logPath` | 行默认 `disabled: true`；`whitelistPath`/`pendingPath` 缺省与 kimi 共用 `~/.kimi-code/readonly_whitelist.json` / `readonly_pending.jsonl` |
 | 各组件 | `logPath` / `enabled` / `dryRun` | 日志在 `~/.kimi-code/hooks/logs/`，默认启用 |
 

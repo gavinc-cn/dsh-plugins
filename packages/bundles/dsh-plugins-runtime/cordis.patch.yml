@@ -53,11 +53,11 @@
     - id: dsh-file-guard
       name: "@gavinc-cn/dsh-file-guard"
 
-# sandbox-path-allowlist：沙箱升权白名单。包内默认 paths 为空 = 不生效（安全的空转默认值），
-# 实际路径由 profile 覆盖行给（容器 web 与宿主 desktop 各自给各自的绝对路径）。
-- insert:
-    - id: sandbox-path-allowlist
-      name: "@gavinc-cn/sandbox-path-allowlist"
+# sandbox-path-allowlist：2026-10-17 由 dsh-path-rules **合并退役**，行与依赖已移除（白名单能力由
+# dsh-path-rules 的 approval/request 监听等价承接，见该包的 spec §2.6 / §4.4）。
+# 组件包本体仍留在仓库 packages/runtime/sandbox-path-allowlist/（回滚时把本 insert 行 + 依赖 +
+# profile 覆盖行挂回即可，spec §8 回滚 3）；「有包、没进 bundle」由 scripts/check-bundles.mjs 的
+# UNBUNDLED 显式登记。
 
 # dsh-readonly-guard：bash 只读闸门（非只读命令转到 DSH 原生审批）。默认**停用**：
 # 容器 web 侧刻意不挂（与既有 sandbox/approval 分层重叠），宿主 desktop 侧由覆盖行
@@ -66,3 +66,11 @@
     - id: dsh-readonly-guard
       disabled: true
       name: "@gavinc-cn/dsh-readonly-guard"
+
+# dsh-path-rules：第五权限模式「路径规则」的逐调用闸门（项目内可读写 / 项目外写需审批 /
+# 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行）。包内默认无白/黑名单 = 安全空转，
+# 且只在预设身份为 `path-rules` 时介入 ⇒ 不选中该档时对既有四档零影响。
+# 白/黑名单等机器相关配置由各 profile 的覆盖行给。
+- insert:
+    - id: dsh-path-rules
+      name: "@gavinc-cn/dsh-path-rules"
