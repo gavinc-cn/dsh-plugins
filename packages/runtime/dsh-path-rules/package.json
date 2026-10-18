@@ -2,7 +2,7 @@
   "name": "@gavinc-cn/dsh-path-rules",
   "title": "路径规则守卫",
   "description": "第五权限模式「路径规则」的逐调用闸门：项目内可读写 / 项目外读允许·写审批 / 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行；经 tools/pre-execute 返回 allow|ask|deny。",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "./lib/index.mjs",
   "files": [
@@ -15,7 +15,7 @@
     "./locale/*.json": "./locale/*.json"
   },
   "scripts": {
-    "test": "node --test test/rules.test.mjs test/classify.test.mjs test/analyze-lex.test.mjs test/analyze-bash.test.mjs test/analyze-pwsh.test.mjs test/decide.test.mjs test/plugin.test.mjs test/analyze-security.test.mjs"
+    "test": "node --test test/rules.test.mjs test/classify.test.mjs test/analyze-lex.test.mjs test/analyze-bash.test.mjs test/analyze-pwsh.test.mjs test/decide.test.mjs test/plugin.test.mjs test/analyze-security.test.mjs test/auto-whitelist.test.mjs"
   },
   "license": "MIT",
   "repository": {

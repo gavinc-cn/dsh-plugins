@@ -11,7 +11,9 @@ DSH 第五权限模式「路径规则」的逐调用闸门：挂在 `tools/pre-e
 - **白名单**内的目录可读可写（直通，不弹框）；
 - **黑名单**内的目录读写**都要审批**（优先级最高，压过白名单与项目内）；
 - `bash` / `pwsh`：只读命令直接放行；写入目标可静态解析时按上述规则判定；
-  解析不出的命令默认拒绝并提示模型改写成可判定形式。
+  解析不出的命令默认拒绝并提示模型改写成可判定形式；
+- **自动白名单**（可选，`autoWhitelist: true`）：用户在审批框里批准的沙箱升权写入目标，
+  其目录会自动进入白名单（持久化），下次同目录的写入不再弹框。见下文。
 
 ## 激活条件
 
@@ -51,10 +53,78 @@ shell 判不出 → unanalyzable 策略（默认 deny + 改写指引）
     failMode: closed              # closed | open：插件内部异常时的兜底
     dryRun: false                 # true = 只记日志不拦（灰度用）
     modelFallback: false          # 预留字段：置 true 仅记一条 warn 日志，判定行为不变
+    autoWhitelist: false          # true = 用户批准的沙箱升权写入目标自动进白名单（默认关闭）
+    autoWhitelistFile: <dsh home>/path-rules/auto-whitelist.json   # 自动白名单状态文件（可选）
     logPath: ~/.kimi-code/hooks/logs/path_rules.dsh.log
 ```
 
-日志事件：`plugin-loaded / allow / ask / deny / pass / dry-run / error`。
+日志事件：`plugin-loaded / allow / ask / deny / pass / dry-run / error`，
+以及自动白名单的 `auto-whitelist / auto-whitelist-skip / auto-whitelist-load /
+auto-whitelist-save / auto-whitelist-error`。
+
+## 自动白名单（`autoWhitelist`，2026-10-18 新增）
+
+**用途**：路径规则档下，项目外写入的审批通路是"沙箱拒绝 → 模型带 `sandbox_permissions` 重试 →
+框架弹审批框"。同一个目录反复写就会反复弹框。打开 `autoWhitelist` 后，用户**批准过一次**的写入目标，
+其目录会被自动记进白名单；之后同一目录的升权请求由本插件直接答 `allowed-once`（不弹框）。
+
+**触发条件**（缺一不可）：
+
+1. `autoWhitelist: true` 且 `enabled: true`、`dryRun: false`；
+2. 会话当前处于「路径规则」档（`activationPreset` 命中，子代理沿父链上溯；其它四档不学习）；
+3. 审批类型是**沙箱升权**（`reason` 以 `escalate sandbox to ` 开头）；
+4. 用户在审批框点了同意（`approval/request` 瀑布下游返回 `allowed-once`；拒绝/取消/不可用都不学）。
+
+**学什么**：从该次调用的参数静态解析写入目标 —— `write`/`edit` 的 `file_path`、`bash`/`pwsh` 的
+写目标（复用 `analyze.mjs`）；目标是已存在的目录就取它自己，否则取父目录。**解析不出就什么都不学**
+（不猜）：MCP/未知工具、判不出的 shell 命令、参数没被记住的调用都只记一条 skip 日志。
+
+**生效方式**：条目并入内存白名单（下一条消息起系统提示里可见），此后：
+
+- 该目录的写入由本插件直接 `allow`（但**沙箱仍会先拒绝首次写入** —— 跨层限制见下）；
+- 模型按提示带 `sandbox_permissions` 重试时，`approval/request` 命中白名单 ⇒ 插件答 `allowed-once`，
+  用户**不再看到弹框**。
+
+命令类（`bash`/`pwsh`）升权请求的命中判定 2026-10-18 起改为**按静态写目标**：全部写目标都落在
+白名单/项目内/临时区、且至少一个命中白名单才自动放行；任一目标命中黑名单或项目外就交给用户。
+只有命令判不出写目标时才退回旧的「命令文本包含白名单路径」粗粒度口径。
+（旧口径会把 `cp /white/f.txt /elsewhere/f.txt` 这类命令静默放行；自动白名单让白名单动态变化后必须收紧。）
+
+**持久化**：默认状态文件 `<dsh home>/path-rules/auto-whitelist.json`（可用 `autoWhitelistFile` 覆盖，
+支持 `~`），格式：
+
+```json
+{
+  "version": 1,
+  "entries": [
+    { "path": "/srv/data", "platform": "linux", "addedAt": "2026-10-18T06:00:00.000Z", "tool": "write", "callId": "call_..." }
+  ]
+}
+```
+
+- 按 `process.platform` **分区存放**：容器（linux）与宿主（win32）共享同一份 `~/.dsh` 时互不串味，
+  写回时保留另一平台的条目；跨平台写法的路径在加载时直接忽略。
+- 原子写（临时文件 + rename）、坏文件容错（只记 error 日志，不影响插件加载）、上限 200 条
+  （超出淘汰最旧）。
+- 用户可直接编辑/删除该文件；**生效时机 = 插件重新加载**（改本行 config 是 patch 层热加载约 2 秒；
+  改代码需重启 dsh）。`loader` 日志里 `auto-whitelist loaded=N` 可确认读到了多少条。
+
+**安全护栏**（自动加入前逐条过滤，丢弃原因写进日志）：
+
+| 跳过原因 | 含义 |
+|---|---|
+| `blacklist` | 目标/目录命中黑名单 ⇒ 不学（黑名单优先级最高，加了也无效） |
+| `no-need` | 目标在项目内或临时区，本来就直通，无需白名单 |
+| `already-whitelisted` | 目录已被现有白名单覆盖 |
+| `protected` | 与插件状态/日志文件或 DSH home 相关（防"自动白名单自己改写自己"） |
+| `sensitive` | 目录是系统根（`/`、`/etc`、`/usr`、`/var`、`/opt` …）或用户 home **自身或其祖先** |
+
+即：批准一个文件**不会**被放大成整个 home/系统目录的长期信任；`/root/data` 这类更深层目录可以自动加入，
+但 `/root` 本身不行（要用就手工写进 config 的 `whitelist`）。
+
+**跨层限制（重要）**：自动白名单**不突破沙箱**。工作区外第一次写入仍会被 `workspace-write` 拒绝一次，
+模型需按错误提示带 `sandbox_permissions` + `justification` 重试；区别只在于重试的审批请求
+由插件自动放行、不再弹框。详见下文「已知盲区 8」。
 
 ## 已知盲区（未覆盖，别当安全）
 
@@ -71,6 +141,12 @@ shell 判不出 → unanalyzable 策略（默认 deny + 改写指引）
    项目外/白名单（工作区外）的写会被沙箱拦下，模型需带 `sandbox_permissions` + `justification`
    重试同一调用以触发框架审批；白名单目标的升权请求由本插件自动答 `allowed-once`（无弹框）。
    详见 spec §4.4。
+9. **自动白名单只学"能静态解析写目标"的调用**：MCP/未知工具、`unanalyzable` 的 shell、参数未被记忆的
+   调用都不学习（只记 skip 日志）；`bash` 的间接产物（脚本内部、后台进程）同既有盲区。
+10. **自动白名单是父目录粒度**：批准 `/a/b/f.txt` 会把整个 `/a/b` 加入白名单（用户语义如此）；
+    敏感根保护只挡系统根与 home 自身/祖先，不挡更深的目录。
+11. **命令判不出写目标时升权放行退回子串口径**：`bash`/`pwsh` 命令若静态分析判不出（`unanalyzable`、
+    参数未记忆），仍按"命令文本包含白名单路径"粗粒度放行 —— 这是旧插件沿用口径，无法在不分析的前提下收紧。
 
 ## 测试
 
@@ -78,10 +154,10 @@ shell 判不出 → unanalyzable 策略（默认 deny + 改写指引）
 cd packages/runtime/dsh-path-rules
 node --test test/rules.test.mjs test/classify.test.mjs test/analyze-lex.test.mjs \
   test/analyze-bash.test.mjs test/analyze-pwsh.test.mjs test/decide.test.mjs \
-  test/plugin.test.mjs test/analyze-security.test.mjs
+  test/plugin.test.mjs test/analyze-security.test.mjs test/auto-whitelist.test.mjs
 ```
 
-（Node v24 下 `node --test test/` 目录形式会失败，必须显式给出文件。）
+（Node v24 下 `node --test test/` 目录形式会失败，必须显式给出文件；`npm test` 已包含全部 9 个文件。）
 
 设计文档：`docs/superpowers/specs/2026-10-16-dsh-path-rules-permission-mode-design.md`；
 实现计划：`docs/superpowers/plans/2026-10-17-dsh-path-rules-permission-mode.md`。

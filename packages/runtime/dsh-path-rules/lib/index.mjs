@@ -18,6 +18,15 @@ import { appendFileSync, mkdirSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import { analyzeCommand } from './analyze.mjs'
+import {
+  MAX_AUTO_ENTRIES,
+  expandHome,
+  filterAutoWhitelistDirs,
+  loadAutoWhitelist,
+  saveAutoWhitelist,
+  sensitiveRoots,
+  writableDirsOf,
+} from './auto-whitelist.mjs'
 import { classifyTool } from './classify.mjs'
 import { combine, classifyPath, decideTarget, normalizePath, normalizeRoots, underRoot } from './rules.mjs'
 
@@ -61,6 +70,9 @@ export function normalizeConfig(raw) {
   if (c.failMode !== undefined && !FAIL_MODES.has(c.failMode)) {
     throw new Error(`dsh-path-rules: failMode must be "closed" or "open", got ${JSON.stringify(c.failMode)}`)
   }
+  if (c.autoWhitelistFile !== undefined && (typeof c.autoWhitelistFile !== 'string' || c.autoWhitelistFile.trim().length === 0)) {
+    throw new Error('dsh-path-rules: autoWhitelistFile must be a non-empty string')
+  }
   const activationPreset = c.activationPreset === undefined ? 'path-rules' : c.activationPreset
   if (typeof activationPreset !== 'string' || activationPreset.trim().length === 0) {
     throw new Error('dsh-path-rules: activationPreset must be a non-empty string')
@@ -75,6 +87,8 @@ export function normalizeConfig(raw) {
     failMode: c.failMode ?? 'closed',
     dryRun: c.dryRun === true,
     modelFallback: c.modelFallback === true,
+    autoWhitelist: c.autoWhitelist === true,
+    autoWhitelistFile: typeof c.autoWhitelistFile === 'string' ? c.autoWhitelistFile.trim() : '',
     logPath: typeof c.logPath === 'string' && c.logPath.trim().length > 0 ? c.logPath.trim() : DEFAULT_LOG,
   }
 }
@@ -197,13 +211,43 @@ function escalationTargetFromArgs(args) {
   return undefined
 }
 
-/** 升权请求的目标是否命中白名单（文件按 realpath 后前缀；命令按粗粒度子串，沿用旧插件口径）。 */
-function escalationIsWhitelisted(target, config, session) {
+/**
+ * 命令类升权请求是否允许自动放行（2026-10-18 严格化）。
+ *
+ * 旧口径只看"命令文本里是否出现白名单路径"，`cp /white/f.txt /elsewhere/f.txt` 也会被静默批准
+ * （自动白名单让白名单动态变化后风险更大）。这里改为按静态分析出的**写目标**判定：
+ *
+ * @returns true      = 全部写目标都在白名单/项目内/临时区，且至少一个命中白名单 ⇒ 可自动放行；
+ *          false     = 存在黑名单或项目外写目标 ⇒ 必须交给用户；
+ *          undefined = 判不出（参数缺失/不可解析/没有写目标）⇒ 退回旧的子串口径兜底。
+ */
+function commandEscalationIsWhitelisted(config, session, services, toolName, args) {
+  if (args === undefined) return undefined
+  const cwd = sessionCwdOf(session, services)
+  const derived = writableDirsOf(toolName, args, cwd)
+  if (derived.pairs.length === 0) return undefined
+  const roots = buildRoots(session, config, services)
+  let sawWhitelist = false
+  for (const pair of derived.pairs) {
+    const kind = classifyPath(pair.target, roots)
+    if (kind === 'blacklist' || kind === 'outside') return false
+    if (kind === 'whitelist') sawWhitelist = true
+  }
+  return sawWhitelist ? true : undefined
+}
+
+/**
+ * 升权请求的目标是否命中白名单（文件按 realpath 后前缀；命令优先按静态写目标严格判定，
+ * 判不出时再用粗粒度子串兜底）。
+ */
+function escalationIsWhitelisted(target, config, session, commandCheck) {
   if (config.whitelist.length === 0) return false
   if (target.kind === 'file') {
     const resolved = normalizePath(target.value, session?.header?.cwd ?? process.cwd())
     return config.whitelist.some((root) => underRoot(resolved, root))
   }
+  const strict = typeof commandCheck === 'function' ? commandCheck() : undefined
+  if (strict !== undefined) return strict
   return config.whitelist.some((root) => target.value.includes(root))
 }
 
@@ -306,8 +350,37 @@ function logLine(logPath, event, summary, detail) {
   }
 }
 
+/**
+ * 解析 DSH home：优先用宿主提供的 `dshHomePath` 服务（尊重 `DSH_HOME`），
+ * 缺失时按 `$DSH_HOME` → `~/.dsh` 回退。用于定位自动白名单状态文件与保护路径。
+ */
+function resolveDshHome(ctx) {
+  const homePath = ctx.get?.('dshHomePath')
+  if (typeof homePath === 'function') {
+    try {
+      const home = homePath()
+      if (typeof home === 'string' && home.length > 0) return home
+    } catch {
+      /* 服务不可用时走环境变量回退 */
+    }
+  }
+  const fromEnv = typeof process.env.DSH_HOME === 'string' ? process.env.DSH_HOME.trim() : ''
+  return fromEnv.length > 0 ? fromEnv : join(homedir(), '.dsh')
+}
+
+/**
+ * 自动白名单状态文件路径：配置优先（支持 `~`），否则放在 `<dsh home>/path-rules/auto-whitelist.json`。
+ * 按平台分区写在文件内部（见 auto-whitelist.mjs），所以容器与宿主同步同一份文件也不会串味。
+ */
+function resolveAutoWhitelistFile(config, ctx) {
+  if (config.autoWhitelistFile.length > 0) {
+    return normalizePath(expandHome(config.autoWhitelistFile, homedir()), process.cwd())
+  }
+  return normalizePath(join(resolveDshHome(ctx), 'path-rules', 'auto-whitelist.json'), process.cwd())
+}
+
 /** 给模型看的规则说明；**只有本会话真的受该模式管辖时才注入**（否则模型会误判自己的权限档）。 */
-function renderRules(config, session, services) {
+function renderRules(config, session, services, extras = {}) {
   if (session === undefined || session === null) return ''
   if (typeof services.presetOf !== 'function') return ''
   try {
@@ -316,15 +389,20 @@ function renderRules(config, session, services) {
     return ''
   }
   const cwd = typeof session?.header?.cwd === 'string' ? session.header.cwd : ''
+  const declaredWhitelist = Array.isArray(extras.declaredWhitelist) ? extras.declaredWhitelist : config.whitelist
+  const autoEntries = Array.isArray(extras.autoEntries) ? extras.autoEntries : []
   const lines = [
     '[path-rules] 当前权限模式：路径规则。',
     `会话工作区（可自由读写）：${cwd.length > 0 ? cwd : '(未知)'}`,
     '工作区外：读取允许；写入需要用户审批（会弹工具审批框）。',
   ]
-  if (config.whitelist.length > 0) lines.push(`白名单（可自由读写）：${config.whitelist.join(', ')}`)
+  if (declaredWhitelist.length > 0) lines.push(`白名单（可自由读写）：${declaredWhitelist.join(', ')}`)
+  if (autoEntries.length > 0) {
+    lines.push(`自动白名单（用户批准后自动学习，升权请求会被自动放行、不弹框）：${autoEntries.map((entry) => entry.path).join(', ')}`)
+  }
   if (config.blacklist.length > 0) lines.push(`黑名单（读写都需要审批）：${config.blacklist.join(', ')}`)
   lines.push('bash/pwsh：只读命令直接放行；写命令请写成可静态判定的形式（显式路径），判不出的命令会被拒绝。')
-  lines.push('工作区外写入若先被沙箱拒绝：用 sandbox_permissions（能覆盖该目标的最窄更宽模式）+ justification 重试同一调用，用户审批后即可写入；白名单内的目标会自动放行。')
+  lines.push('工作区外写入若先被沙箱拒绝：用 sandbox_permissions（能覆盖该目标的最窄更宽模式）+ justification 重试同一调用，用户审批后即可写入；白名单与自动白名单内的目标会自动放行。')
   return lines.join('\n')
 }
 
@@ -374,15 +452,34 @@ function compose(downstream, decision, config, log, exec) {
  */
 export function apply(ctx, rawConfig) {
   const base = normalizeConfig(rawConfig)
+  const declaredWhitelist = normalizeRoots(base.whitelist, process.cwd())
   const config = {
     ...base,
-    whitelist: normalizeRoots(base.whitelist, process.cwd()),
+    whitelist: [...declaredWhitelist],
     blacklist: normalizeRoots(base.blacklist, process.cwd()),
   }
   const log = (event, summary, detail) => logLine(config.logPath, event, summary, detail)
-  log('plugin-loaded', `enabled=${config.enabled}`, `activationPreset=${config.activationPreset} dryRun=${config.dryRun}`)
+  log('plugin-loaded', `enabled=${config.enabled} autoWhitelist=${config.autoWhitelist}`, `activationPreset=${config.activationPreset} dryRun=${config.dryRun}`)
   if (config.modelFallback) {
     log('error', 'warn:model-fallback-ignored', 'modelFallback 本期不改变判定行为（模型裁决路径需另立 spec）')
+  }
+
+  // 自动白名单的状态文件与保护路径（只在开关打开时才读盘；关闭时零 IO、零行为变化）。
+  const autoWhitelistFile = resolveAutoWhitelistFile(config, ctx)
+  const dshHome = resolveDshHome(ctx)
+  const protectedPaths = [...new Set([autoWhitelistFile, config.logPath, dshHome])]
+  /** 当前进程内的自动白名单条目（与 config.whitelist 同步追加；持久化只写本平台分区）。 */
+  const autoEntries = []
+  if (config.autoWhitelist) {
+    const loaded = loadAutoWhitelist(autoWhitelistFile, process.platform)
+    if (loaded.error !== undefined) log('error', 'auto-whitelist-load', loaded.error)
+    for (const entry of loaded.entries) {
+      const normalized = normalizePath(entry.path, process.cwd())
+      if (normalized.length === 0 || autoEntries.some((item) => item.path === normalized)) continue
+      autoEntries.push({ ...entry, path: normalized })
+      if (!config.whitelist.includes(normalized)) config.whitelist.push(normalized)
+    }
+    if (autoEntries.length > 0) log('auto-whitelist', `loaded=${autoEntries.length}`, autoWhitelistFile)
   }
 
   const services = {
@@ -412,29 +509,100 @@ export function apply(ctx, rawConfig) {
     scope.systemPrompt.context({
       name: 'path-rules',
       order: 111,
-      text: (context) => renderRules(config, context?.agent?.session, services),
+      text: (context) => renderRules(config, context?.agent?.session, services, { declaredWhitelist, autoEntries }),
     })
   })
 
+  /**
+   * 把一次"用户批准的沙箱升权调用"学进自动白名单。
+   *
+   * 只在 path-rules 档激活的会话里学（其它档不改变任何状态）；任何异常都吞掉并记日志 ——
+   * 它只是顺手降低重复弹框，绝不能影响审批结果本身。
+   */
+  const learnFromApproval = (request) => {
+    const session = request.agent?.session
+    if (session === undefined || session === null) return
+    if (!isActive(session, config, services)) return
+    const args = recentCallArgs.get(request.callId)
+    if (args === undefined) {
+      log('auto-whitelist-skip', 'no-remembered-args', request.callId)
+      return
+    }
+    const cwd = sessionCwdOf(session, services)
+    const derived = writableDirsOf(request.toolName, args, cwd)
+    if (derived.pairs.length === 0) {
+      log('auto-whitelist-skip', derived.reason ?? 'no-write-target', request.callId)
+      return
+    }
+    const roots = buildRoots(session, config, services)
+    const { accepted, skipped } = filterAutoWhitelistDirs(derived.pairs, {
+      roots,
+      protectedPaths,
+      sensitiveRoots: sensitiveRoots(),
+    })
+    for (const item of skipped) log('auto-whitelist-skip', `${item.reason} ${item.dir}`, describeCall({ name: request.toolName, arguments: args }))
+    if (accepted.length === 0) return
+
+    const added = []
+    for (const dir of accepted) {
+      if (autoEntries.some((entry) => entry.path === dir)) continue
+      autoEntries.push({
+        path: dir,
+        platform: process.platform,
+        addedAt: new Date().toISOString(),
+        tool: String(request.toolName ?? ''),
+        callId: request.callId,
+      })
+      if (!config.whitelist.includes(dir)) config.whitelist.push(dir)
+      added.push(dir)
+    }
+    // 上限按"最旧淘汰"：自动白名单只是便利，不能无限膨胀。
+    while (autoEntries.length > MAX_AUTO_ENTRIES) {
+      const dropped = autoEntries.shift()
+      const index = config.whitelist.indexOf(dropped.path)
+      if (index >= 0) config.whitelist.splice(index, 1)
+    }
+    if (added.length === 0) return
+    const saved = saveAutoWhitelist(autoWhitelistFile, process.platform, autoEntries)
+    if (!saved.ok) log('error', 'auto-whitelist-save', saved.error)
+    log('auto-whitelist', `added=${added.length}`, added.join(', '))
+  }
+
   // 白名单目标的沙箱升权请求自动放行（承接已退役的 sandbox-path-allowlist 能力）：
   // 只作答 "escalate sandbox to " 开头的请求，且目标必须命中白名单；其余一律交给下游弹框。
+  // autoWhitelist 打开时再包一层：等用户的结论，只有 allowed-once（用户点了同意）才学习。
   ctx.on('approval/request', (request, next) => {
     if (typeof request?.callId !== 'string') return next()
     if (typeof request.reason !== 'string' || !request.reason.startsWith(SANDBOX_ESCALATION_PREFIX)) return next()
+
+    let target
     try {
       const remembered = recentCallArgs.get(request.callId)
       const session = request.agent?.session
       // remembered 优先：真实运行态里审批请求附带的 session 不暴露 events，无法按 callId 回查
       // 会话日志（实测 hasEvents=false），只有 pre-execute 时记下的参数可靠。
-      const target = escalationTargetFromArgs(remembered) ?? escalationTargetOf(session, request.callId)
-      if (target === undefined || !escalationIsWhitelisted(target, config, session)) return next()
-      // remembered 只进审计日志，便于区分"走记忆命中"与"走会话日志兜底命中"
-      log('allow', 'whitelist-escalation', `${request.callId} remembered=${remembered !== undefined} ${target.value}`)
-      return 'allowed-once'
+      target = escalationTargetFromArgs(remembered) ?? escalationTargetOf(session, request.callId)
+      const commandCheck = () => commandEscalationIsWhitelisted(config, session, services, request.toolName, remembered)
+      if (target !== undefined && escalationIsWhitelisted(target, config, session, commandCheck)) {
+        // remembered 只进审计日志，便于区分"走记忆命中"与"走会话日志兜底命中"
+        log('allow', 'whitelist-escalation', `${request.callId} remembered=${remembered !== undefined} ${target.value}`)
+        return 'allowed-once'
+      }
     } catch (error) {
       log('error', 'approval-error', String(error))
       return next()
     }
+    if (target === undefined || !config.autoWhitelist || !config.enabled || config.dryRun) return next()
+    return Promise.resolve(next()).then((outcome) => {
+      if (outcome === 'allowed-once') {
+        try {
+          learnFromApproval(request)
+        } catch (error) {
+          log('error', 'auto-whitelist-error', String(error))
+        }
+      }
+      return outcome
+    })
   }, { prepend: true })
 
   ctx.on('tools/pre-execute', async (exec, next) => {
