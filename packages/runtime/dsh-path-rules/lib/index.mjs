@@ -10,7 +10,8 @@
 //   ② 模式未激活（预设身份不是 activationPreset，且父链上也找不到）⇒ pass
 //   ③ 工具分派：pass ⇒ pass；read/write ⇒ 逐目标判定；shell ⇒ 先静态分析
 //   ④ 合成：多目标最严者胜（任一 ask 则 ask）
-//   ⑤ unanalyzable ⇒ 按 unanalyzable 策略：deny（默认，带改写指引）或 ask
+//   ⑤ unanalyzable ⇒ 先黑名单文本粗检（opaqueBlacklistScan），再按 unanalyzable 策略：
+//      pass（v2 默认，交给沙箱运行时拦写）/ ask / deny
 //   ⑥ 审批通道检查：子代理 / 会话 approval 为 never ⇒ 就地把 ask 改写成 deny
 //   （⑦ 与下游合成、⑧ failMode 兜底在 apply() 里做，见 Task 8）
 
@@ -38,8 +39,8 @@ const DEFAULT_LOG = join(homedir(), '.kimi-code', 'hooks', 'logs', 'path_rules.d
 /** 父链上溯的最大层数（防环 + 防病态深链）。 */
 const MAX_PARENT_HOPS = 8
 
-/** 允许的 unanalyzable 策略。 */
-const UNANALYZABLE_POLICIES = new Set(['deny', 'ask'])
+/** 允许的 unanalyzable 策略：pass=交给沙箱（v2 默认）、ask、deny。 */
+const UNANALYZABLE_POLICIES = new Set(['deny', 'ask', 'pass'])
 
 /** 允许的 failMode。 */
 const FAIL_MODES = new Set(['closed', 'open'])
@@ -65,7 +66,7 @@ function absolutePathList(value, field) {
 export function normalizeConfig(raw) {
   const c = raw ?? {}
   if (c.unanalyzable !== undefined && !UNANALYZABLE_POLICIES.has(c.unanalyzable)) {
-    throw new Error(`dsh-path-rules: unanalyzable must be "deny" or "ask", got ${JSON.stringify(c.unanalyzable)}`)
+    throw new Error(`dsh-path-rules: unanalyzable must be "deny", "ask" or "pass", got ${JSON.stringify(c.unanalyzable)}`)
   }
   if (c.failMode !== undefined && !FAIL_MODES.has(c.failMode)) {
     throw new Error(`dsh-path-rules: failMode must be "closed" or "open", got ${JSON.stringify(c.failMode)}`)
@@ -83,12 +84,14 @@ export function normalizeConfig(raw) {
     whitelist: absolutePathList(c.whitelist, 'whitelist'),
     blacklist: absolutePathList(c.blacklist, 'blacklist'),
     allowTempRoots: c.allowTempRoots !== false,
-    unanalyzable: c.unanalyzable ?? 'deny',
+    unanalyzable: c.unanalyzable ?? 'pass',
     failMode: c.failMode ?? 'closed',
     dryRun: c.dryRun === true,
     modelFallback: c.modelFallback === true,
     autoWhitelist: c.autoWhitelist === true,
     autoWhitelistFile: typeof c.autoWhitelistFile === 'string' ? c.autoWhitelistFile.trim() : '',
+    preemptiveWhitelistEscalation: c.preemptiveWhitelistEscalation !== false,
+    opaqueBlacklistScan: c.opaqueBlacklistScan !== false,
     logPath: typeof c.logPath === 'string' && c.logPath.trim().length > 0 ? c.logPath.trim() : DEFAULT_LOG,
   }
 }
@@ -266,6 +269,38 @@ function sessionCwdOf(session, services) {
 }
 
 /**
+ * 判不出读写目标时的兜底决策（v2，2026-10-18）。
+ *
+ * 设计目标：路径规则档是 workspace-write 的**超集**，不能比它更严。因此默认 `pass`
+ * （把命令透传给沙箱，由 workspace-write 在 syscall 级拦写）；`deny`/`ask` 仅作为配置保留。
+ *
+ * 黑名单的「读」沙箱不拦（沙箱只限制写），对判不出的命令只剩**命令文本粗检**这一道兜底：
+ * 命令文本里出现黑名单路径 ⇒ ask（`opaqueBlacklistScan` 可关）。它拦不住脚本内部/间接读取，
+ * 属文档化盲区（spec v2 §7）。
+ *
+ * @param effect - classifyTool 的 shell 结果（unanalyzable 只可能来自 shell）。
+ * @param unanalyzable - analyzeCommand 的 {reason, fragment}。
+ * @param config - normalizeConfig 的结果。
+ * @returns `{ kind: 'pass' } | { kind: 'ask'|'deny', code, reason }`。
+ */
+function decideUnanalyzable(effect, unanalyzable, config) {
+  const guidance = '；也可改写成可静态判定的形式（显式绝对路径、限定的写目标，或拆分命令）'
+  if (config.opaqueBlacklistScan && config.blacklist.length > 0 && effect.kind === 'shell') {
+    const hit = config.blacklist.find((root) => root.length > 0 && effect.command.includes(root))
+    if (hit !== undefined) {
+      return { kind: 'ask', code: 'BLACKLIST_COARSE', reason: `命令文本包含黑名单路径（无法静态解析，粗粒度判定）：${hit}` }
+    }
+  }
+  if (config.unanalyzable === 'ask') {
+    return { kind: 'ask', code: 'UNANALYZABLE', reason: `无法静态判定该命令的读写目标（${unanalyzable.reason}）${guidance}` }
+  }
+  if (config.unanalyzable === 'deny') {
+    return { kind: 'deny', code: 'UNANALYZABLE', reason: `无法静态判定该命令的读写目标（${unanalyzable.reason}），已拒绝${guidance}` }
+  }
+  return { kind: 'pass' }
+}
+
+/**
  * 判定一次工具调用（纯判定：不写日志、不触 IO、不改状态）。
  *
  * @param exec - tools/pre-execute 的 exec（用 name / arguments / agent.session）。
@@ -305,10 +340,9 @@ export function decideCall(exec, config, services) {
 
   let decision
   if (unanalyzable !== null) {
-    const guidance = '；请改写成可静态判定的形式（显式绝对路径、限定的写目标，或拆分命令）'
-    decision = config.unanalyzable === 'ask'
-      ? { kind: 'ask', code: 'UNANALYZABLE', reason: `无法静态判定该命令的读写目标（${unanalyzable.reason}）${guidance}` }
-      : { kind: 'deny', code: 'UNANALYZABLE', reason: `无法静态判定该命令的读写目标（${unanalyzable.reason}），已拒绝${guidance}` }
+    decision = decideUnanalyzable(effect, unanalyzable, config)
+    // v2：默认策略是"交给沙箱"（workspace-write 的 syscall 级写拦截），不产生本插件的判定
+    if (decision.kind === 'pass') return pass()
   } else {
     // 任一 ask 优先（需要用户批准）；否则只要有一个目标要"交沙箱审批"就整体透传（沙箱会拦、会弹框）；
     // 全部 allow 才由我们直接放行。
@@ -401,8 +435,8 @@ function renderRules(config, session, services, extras = {}) {
     lines.push(`自动白名单（用户批准后自动学习，升权请求会被自动放行、不弹框）：${autoEntries.map((entry) => entry.path).join(', ')}`)
   }
   if (config.blacklist.length > 0) lines.push(`黑名单（读写都需要审批）：${config.blacklist.join(', ')}`)
-  lines.push('bash/pwsh：只读命令直接放行；写命令请写成可静态判定的形式（显式路径），判不出的命令会被拒绝。')
-  lines.push('工作区外写入若先被沙箱拒绝：用 sandbox_permissions（能覆盖该目标的最窄更宽模式）+ justification 重试同一调用，用户审批后即可写入；白名单与自动白名单内的目标会自动放行。')
+  lines.push('bash/pwsh：只读命令直接放行；写命令目标可静态判定时按项目内/白名单/黑名单判定；判不出的命令交给沙箱按「工作区内修改」档在运行时拦截写入（不再直接拒绝）。')
+  lines.push('白名单目录的写入（能静态判定写目标时）会自动升权、一次成功；其它工作区外写入若被沙箱拒绝：用 sandbox_permissions（能覆盖该目标的最窄更宽模式）+ justification 重试同一调用，用户审批后即可写入。')
   return lines.join('\n')
 }
 
@@ -442,6 +476,58 @@ function compose(downstream, decision, config, log, exec) {
     return downstream
   }
   return downstream
+}
+
+/**
+ * 白名单写入的预置升权（v2 D13，2026-10-18 方案 B）。
+ *
+ * 背景：白名单目录位于沙箱可写根（会话工作区 + 临时区）之外，即便插件判定 allow，沙箱仍会先拒绝一次，
+ * 模型必须带 sandbox_permissions 重试、再由本插件自动放行 —— 多一次失败往返。
+ *
+ * 做法：对**静态可判定**且写目标全部合法（白名单/项目内/临时区）、至少一个命中白名单、且至少一个在沙箱
+ * 可写根之外的 bash/pwsh 调用，在 pre-execute 里给该次调用预置
+ * `sandbox_permissions: danger-full-access` + justification；随后 bash/pwsh 工具发起升权审批，
+ * 本插件的 approval/request 监听器按白名单自动 `allowed-once`（不弹框），实现"一次成功"。
+ *
+ * 安全边界：该调用最终执行的策略与"模型被拒后重试成功"完全相同（同样 danger-full-access、同样由
+ * commandEscalationIsWhitelisted 的静态判据放行），不新增放权面；静态分析漏判的风险与既有自动放行同级。
+ * 任何失败（参数不可写/校验异常）都只记日志、退回沙箱首拒链路，不改变判定结果。
+ *
+ * @returns 是否注入了升权参数。
+ */
+function preemptWhitelistEscalation(exec, config, services, log) {
+  if (!config.preemptiveWhitelistEscalation || config.dryRun) return false
+  const effect = classifyTool(exec.name, exec.arguments)
+  if (effect.kind !== 'shell') return false
+  const args = exec.arguments
+  if (args === null || typeof args !== 'object') return false
+  // 模型自己带了升权参数（被拒后的重试）时尊重原请求，不覆盖
+  if (args.sandbox_permissions !== undefined || args.justification !== undefined) return false
+  const session = sessionOf(exec)
+  if (session === undefined || session === null) return false
+  const cwd = effect.workdir.length > 0 ? effect.workdir : sessionCwdOf(session, services)
+  const analysis = analyzeCommand(effect.command, { shell: effect.shell, cwd })
+  if (analysis.unanalyzable !== null || analysis.writes.length === 0) return false
+  const roots = buildRoots(session, config, services)
+  let sawWhitelist = false
+  let needsEscalation = false
+  for (const write of analysis.writes) {
+    const target = normalizePath(write, cwd)
+    const kind = classifyPath(target, roots)
+    // 黑名单/项目外写不预置：交给既有判定链（ask / 沙箱审批），避免绕过用户决策
+    if (kind === 'blacklist' || kind === 'outside') return false
+    if (kind === 'whitelist') sawWhitelist = true
+    if (!insideWritableRoots(target, roots)) needsEscalation = true
+  }
+  if (!sawWhitelist || !needsEscalation) return false
+  try {
+    args.sandbox_permissions = 'danger-full-access'
+    args.justification = `路径规则：白名单目录写入自动升权（${analysis.writes.slice(0, 3).join(', ')}）`
+  } catch {
+    return false
+  }
+  log('allow', 'preempt-escalation', describeCall(exec))
+  return true
 }
 
 /**
@@ -628,6 +714,14 @@ export function apply(ctx, rawConfig) {
         }
       }
       return downstream
+    }
+    // v2 D13：白名单写的预置升权（只对"插件判定 allow"的调用；注入失败只记日志，退回沙箱首拒链路）
+    if (decision.kind === 'allow') {
+      try {
+        preemptWhitelistEscalation(exec, config, services, log)
+      } catch (error) {
+        log('error', 'preempt-escalation-error', String(error))
+      }
     }
     return compose(downstream, decision, config, log, exec)
   })

@@ -10,8 +10,10 @@ DSH 第五权限模式「路径规则」的逐调用闸门：挂在 `tools/pre-e
 - 项目外目录**只读**，写入需要用户审批；
 - **白名单**内的目录可读可写（直通，不弹框）；
 - **黑名单**内的目录读写**都要审批**（优先级最高，压过白名单与项目内）；
-- `bash` / `pwsh`：只读命令直接放行；写入目标可静态解析时按上述规则判定；
-  解析不出的命令默认拒绝并提示模型改写成可判定形式；
+- `bash` / `pwsh`：只读命令直接放行；写入目标可静态解析时按上述规则判定；**解析不出的命令默认交给沙箱**
+  （workspace-write 的运行时写拦截，与「工作区内修改」档一致），可用 `unanalyzable: deny|ask` 改回严格；
+- **白名单写入预置升权**（`preemptiveWhitelistEscalation`，默认开）：静态可判定的白名单写一次成功、不弹框
+  （预置 danger-full-access + 插件自动 `allowed-once`，见下文）；
 - **自动白名单**（可选，`autoWhitelist: true`）：用户在审批框里批准的沙箱升权写入目标，
   其目录会自动进入白名单（持久化），下次同目录的写入不再弹框。见下文。
 
@@ -30,8 +32,8 @@ DSH 第五权限模式「路径规则」的逐调用闸门：挂在 `tools/pre-e
 ```
 黑名单命中 → ask        白名单命中 → allow       项目内 → allow
 临时区（/tmp、os.tmpdir()）→ allow                项目外读 → allow
-项目外写 → ask
-shell 判不出 → unanalyzable 策略（默认 deny + 改写指引）
+项目外写 → ask（工作区外写交给沙箱升权）
+shell 判不出 → 黑名单文本粗检（命中 ⇒ ask）→ 否则按 `unanalyzable` 策略（默认 pass，交给沙箱）
 ```
 
 `ask` 走框架标准审批流程（`ctx.approval.request`）；会话审批通道为 `never`（子代理被框架钉成
@@ -49,11 +51,13 @@ shell 判不出 → unanalyzable 策略（默认 deny + 改写指引）
     whitelist: []                 # 绝对路径；可读可写，压过"项目外"，但被黑名单压过
     blacklist: []                 # 绝对路径；读写都要审批，压过一切
     allowTempRoots: true          # /tmp + os.tmpdir() 视为可写（与沙箱口径一致）
-    unanalyzable: deny            # deny | ask：shell 判不出时的兜底
+    unanalyzable: pass            # deny | ask | pass：shell 判不出时的兜底（pass=交给沙箱，v2 默认）
     failMode: closed              # closed | open：插件内部异常时的兜底
     dryRun: false                 # true = 只记日志不拦（灰度用）
     modelFallback: false          # 预留字段：置 true 仅记一条 warn 日志，判定行为不变
     autoWhitelist: false          # true = 用户批准的沙箱升权写入目标自动进白名单（默认关闭）
+    preemptiveWhitelistEscalation: true  # 白名单写预置升权：一次成功、不弹框（v2 默认开）
+    opaqueBlacklistScan: true     # 判不出命令的黑名单文本粗检（黑名单读的唯一兜底，v2 默认开）
     autoWhitelistFile: <dsh home>/path-rules/auto-whitelist.json   # 自动白名单状态文件（可选）
     logPath: ~/.kimi-code/hooks/logs/path_rules.dsh.log
 ```
@@ -126,6 +130,21 @@ auto-whitelist-save / auto-whitelist-error`。
 模型需按错误提示带 `sandbox_permissions` + `justification` 重试；区别只在于重试的审批请求
 由插件自动放行、不再弹框。详见下文「已知盲区 8」。
 
+## 白名单写入的预置升权（`preemptiveWhitelistEscalation`，2026-10-18 v2）
+
+**用途**：白名单目录在沙箱可写根（会话工作区 + 临时区）之外，静态判定放行后沙箱仍会先拒绝一次，
+模型需带 `sandbox_permissions` 重试、插件再自动放行。预置升权把这一步提前，让白名单写**一次成功**。
+
+**条件（全部满足）**：开启且非 `dryRun`；工具是 `bash`/`pwsh`；静态分析判得出写目标且非空；每个写目标
+∈ 白名单/项目内/临时区；至少一个命中白名单；至少一个在沙箱可写根之外；调用参数里没有
+`sandbox_permissions`/`justification`（尊重模型自己的升权请求）。
+
+**机制**：pre-execute 里给该次调用预置 `sandbox_permissions: danger-full-access` + justification；
+bash/pwsh 工具随后发起升权审批，插件自己的 `approval/request` 监听器按白名单自动答 `allowed-once`
+（不弹框）。执行策略与"模型重试后自动放行"完全相同，不新增放权面；注入失败（参数不可写等）只记
+`preempt-escalation-error` 日志并退回原链路。方案 C（自研 sandbox provider 让白名单成为运行时 RW 根）
+落地后应关闭本项（`preemptiveWhitelistEscalation: false`），否则会绕过 C 的运行时拦截。
+
 ## 已知盲区（未覆盖，别当安全）
 
 1. **长驻进程自行写盘**：`bash` 的 `run_in_background`、`job_*` 起的进程在命令文本之外写文件。
@@ -147,6 +166,13 @@ auto-whitelist-save / auto-whitelist-error`。
     敏感根保护只挡系统根与 home 自身/祖先，不挡更深的目录。
 11. **命令判不出写目标时升权放行退回子串口径**：`bash`/`pwsh` 命令若静态分析判不出（`unanalyzable`、
     参数未记忆），仍按"命令文本包含白名单路径"粗粒度放行 —— 这是旧插件沿用口径，无法在不分析的前提下收紧。
+12. **判不出命令的黑名单「读」**：沙箱只拦写、不拦读，本插件对判不出的命令只剩"命令文本粗检"
+    （`opaqueBlacklistScan`）；脚本内部/间接读取（如脚本文件里读黑名单路径）不可见。
+13. **判不出命令的白名单「写」**：无法预判写目标 ⇒ 仍走"沙箱首拒 → 升权重试"；且升权审批因解析不出目标
+    会弹用户框、`autoWhitelist` 也学不到（`writableDirsOf` 对 unanalyzable 返回空）。
+14. **预置升权（`preemptiveWhitelistEscalation`）使该次调用失去沙箱写兜底**：与既有"模型重试后插件自动
+    放行"属同一信任级别（最终都是 danger-full-access），但仍依赖静态分析正确；可用
+    `preemptiveWhitelistEscalation: false` 关闭，退回"首拒 + 重试"链路。
 
 ## 测试
 
@@ -159,5 +185,6 @@ node --test test/rules.test.mjs test/classify.test.mjs test/analyze-lex.test.mjs
 
 （Node v24 下 `node --test test/` 目录形式会失败，必须显式给出文件；`npm test` 已包含全部 9 个文件。）
 
-设计文档：`docs/superpowers/specs/2026-10-16-dsh-path-rules-permission-mode-design.md`；
+v2 设计（路径规则 = workspace-write 超集，2026-10-18）：`docs/superpowers/specs/2026-10-18-path-rules-v2-superset-design.md`；
+设计文档（v1）：`docs/superpowers/specs/2026-10-16-dsh-path-rules-permission-mode-design.md`；
 实现计划：`docs/superpowers/plans/2026-10-17-dsh-path-rules-permission-mode.md`。
