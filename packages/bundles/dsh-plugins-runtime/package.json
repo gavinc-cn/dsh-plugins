@@ -1,6 +1,6 @@
 {
   "name": "@gavinc-cn/dsh-plugins-runtime",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "DSH 插件组合包（runtime bundle）：7 个宿主（node）侧组件（记忆、git/文件守卫、只读闸门、路径规则闸门、重开会话再注入等），每个是一行独立开关；面向 Web GUI 的组件见 @gavinc-cn/dsh-plugins-ui。",
   "license": "MIT",
   "repository": {
@@ -48,6 +48,6 @@
     "@gavinc-cn/dsh-git-guard": "^0.1.0",
     "@gavinc-cn/dsh-file-guard": "^0.1.0",
     "@gavinc-cn/dsh-readonly-guard": "^0.1.0",
-    "@gavinc-cn/dsh-path-rules": "^0.1.0"
+    "@gavinc-cn/dsh-path-rules": "^0.1.1"
   }
 }
