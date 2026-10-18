@@ -18,6 +18,13 @@
 > 覆盖）。`dsh-plugins-runtime@0.1.3` 的 README 同步记录该参数，对 `dsh-path-rules` 的依赖范围提到
 > `^0.1.1`；聚合元包 `dsh-plugins@0.2.2` 内容未变、不重发。
 >
+> **版本说明（2026-10-19，第 7 轮）**：`dsh-path-rules@0.1.2` 起，路径规则档成为 `workspace-write`
+> 的**超集**：判不出读写的命令不再命令级拒绝，默认透传给沙箱按运行时拦截（`unanalyzable: pass`）；
+> 白名单目录的写入会预置升权、一次成功且不弹框（`preemptiveWhitelistEscalation`）；判不出的命令
+> 会对命令文本做黑名单粗检（`opaqueBlacklistScan`，黑名单「读」的唯一兜底）。回滚：`unanalyzable: deny`
+> + `preemptiveWhitelistEscalation: false`。`dsh-plugins-runtime@0.1.4` 的 README 同步记录上述默认值
+> 与参数，对 `dsh-path-rules` 的依赖范围提到 `^0.1.2`；聚合元包 `dsh-plugins@0.2.2` 内容未变、不重发。
+>
 > **版本说明（2026-10-18）**：`dsh-plugins-runtime@0.1.2` / `dsh-plugins@0.2.2` 起，新增组件包
 > `dsh-path-rules@0.1.0`（首发）—— ① 运行时 bundle 用 `dsh-path-rules`（第五权限模式「路径规则」的
 > 逐调用闸门）替换职责重叠的 `sandbox-path-allowlist`，后者**合并退役**：行与依赖移除，包本体仍留在
