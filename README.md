@@ -12,6 +12,12 @@
 | 只要 UI 那 5 个 | `@gavinc-cn/dsh-plugins-ui` | 6 个包：5 个面向 Web GUI 的组件 + bundle |
 | 只要运行时那 7 个 | `@gavinc-cn/dsh-plugins-runtime` | 8 个包：7 个宿主侧组件 + bundle |
 
+> **版本说明（2026-10-18，第 6 轮）**：`dsh-path-rules@0.1.1` 新增 `autoWhitelist` —— 用户批准一次
+> 沙箱升权写入后，把该目录记进自动白名单，同目录后续的升权请求由插件自动放行、不再弹框
+> （**默认关闭**；状态文件在 `<dsh home>/path-rules/auto-whitelist.json`，可用 `autoWhitelistFile`
+> 覆盖）。`dsh-plugins-runtime@0.1.3` 的 README 同步记录该参数，对 `dsh-path-rules` 的依赖范围提到
+> `^0.1.1`；聚合元包 `dsh-plugins@0.2.2` 内容未变、不重发。
+>
 > **版本说明（2026-10-18）**：`dsh-plugins-runtime@0.1.2` / `dsh-plugins@0.2.2` 起，新增组件包
 > `dsh-path-rules@0.1.0`（首发）—— ① 运行时 bundle 用 `dsh-path-rules`（第五权限模式「路径规则」的
 > 逐调用闸门）替换职责重叠的 `sandbox-path-allowlist`，后者**合并退役**：行与依赖移除，包本体仍留在
@@ -70,7 +76,7 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 | `dsh-autocommit` | 自动提交守卫：本会话改过文件却要接着跑下一回合时挡下，提示模型先提交（不自行提交） |
 | `dsh-git-guard` | git 归属守卫：拦下缺 agent 前缀的 commit、越界的 reset/amend/branch/worktree/merge/tag/config 等写操作 |
 | `dsh-file-guard` | 文件漂移守卫：每轮收尾比对「本会话写过的文件」与磁盘，发现被外部覆盖/回退时提示（不自动改回） |
-| `dsh-path-rules` | 第五权限模式「路径规则」的逐调用闸门：项目内可读写 / 项目外读允许·写审批 / 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行；只在预设身份为 `path-rules` 时介入（2026-10-17 起承接退役的 `sandbox-path-allowlist` 白名单能力） |
+| `dsh-path-rules` | 第五权限模式「路径规则」的逐调用闸门：项目内可读写 / 项目外读允许·写审批 / 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行；只在预设身份为 `path-rules` 时介入（2026-10-17 起承接退役的 `sandbox-path-allowlist` 白名单能力；2026-10-18 起 `autoWhitelist` 可把用户批准的升权写入目录自动记入白名单） |
 | `dsh-readonly-guard` | 只读守卫：bash 只读命令放行，可能改系统的默认转 DSH 原生审批；**默认停用** |
 
 ### `@gavinc-cn/dsh-plugins`（聚合元包）
