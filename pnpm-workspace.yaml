@@ -5,8 +5,8 @@
 #   ui/       6 个面向 Web GUI 的组件包（4 个纯浏览器组件声明 dsh.client.platform: "web"；
 #             dsh-patch-ask-expand 宿主侧打补丁但效果在 GUI，2026-10-15 从 runtime/ 移入；
 #             kanban-board 自 2026-10-15 起不随任何 bundle 下发）
-#   runtime/  7 个宿主（node）侧组件包
-#   bundles/  3 个组合包：dsh-plugins-ui（UI 的 5 行）+ dsh-plugins-runtime（运行时的 7 行）
+#   runtime/  9 个宿主（node）侧组件包
+#   bundles/  3 个组合包：dsh-plugins-ui（UI 的 5 行）+ dsh-plugins-runtime（运行时的 8 行）
 #             + dsh-plugins（聚合元包，0.2.0 起不再含任何配置行）
 #
 # 注意：包之间的依赖一律写**普通 semver**（如 "^0.1.0"），不要用 `workspace:` 协议 ——
