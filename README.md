@@ -1,6 +1,6 @@
 # dsh-plugins —— @gavinc-cn 的 DSH 插件集
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**14 个组件包** +
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**15 个组件包** +
 **2 个 bundle** + **1 个聚合元包**。本仓库是这些插件源码的真源，npm 上的包由这里的
 `packages/<分组>/<包>/` 逐个发布。
 
@@ -8,10 +8,18 @@
 
 | 想要什么 | 装哪个 | 装完得到 |
 |---|---|---|
-| 全都要 | `@gavinc-cn/dsh-plugins` | 15 个包：12 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
+| 全都要 | `@gavinc-cn/dsh-plugins` | 16 个包：13 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
 | 只要 UI 那 5 个 | `@gavinc-cn/dsh-plugins-ui` | 6 个包：5 个面向 Web GUI 的组件 + bundle |
-| 只要运行时那 7 个 | `@gavinc-cn/dsh-plugins-runtime` | 8 个包：7 个宿主侧组件 + bundle |
+| 只要运行时那 8 个 | `@gavinc-cn/dsh-plugins-runtime` | 9 个包：8 个宿主侧组件 + bundle |
 
+> **版本说明（2026-10-21，第 8 轮）**：新增组件包 `dsh-write-guard@0.1.0`（首发）—— 第六权限模式
+> 「完全权限（拦截）」的逐调用写入闸门：读任意文件放行；项目内（会话工作区根）与白名单目录写直通；
+> 越界写弹框并把目录自动学进白名单；静态判不出写目标的 `bash`/`pwsh` 交当前会话模型判定（safe →
+> 放行，unsafe/unknown → 带理由问用户）。**只在预设身份为 `write-guard` 时介入**，其余档位零影响；
+> 插件停用 = 完全不拦截。随之 `dsh-path-rules@0.1.3` 新增 `./analyze` 等 subpath exports（行为不变，
+> 供 write-guard 复用判定链）、`dsh-plugins-runtime@0.1.5` 加入第 8 行（依赖范围提到 `^0.1.3` 与
+> `^0.1.0`）、聚合元包 `dsh-plugins@0.2.3` 更新组件数文案。上表包数是本仓库当前代码的形态。
+>
 > **版本说明（2026-10-18，第 6 轮）**：`dsh-path-rules@0.1.1` 新增 `autoWhitelist` —— 用户批准一次
 > 沙箱升权写入后，把该目录记进自动白名单，同目录后续的升权请求由插件自动放行、不再弹框
 > （**默认关闭**；状态文件在 `<dsh home>/path-rules/auto-whitelist.json`，可用 `autoWhitelistFile`
@@ -74,7 +82,7 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 > `packages/ui/kanban-board/`、npm 上也可单独安装，但装 `dsh-plugins-ui` 不会带上它。
 > 要用就在 profile 的 `cordis.patch.yml` 里手写一条 insert（面板里不会有行/开关）。
 
-### `@gavinc-cn/dsh-plugins-runtime`（7 个，宿主侧）
+### `@gavinc-cn/dsh-plugins-runtime`（8 个，宿主侧）
 
 | 组件 | 说明 |
 |---|---|
@@ -84,6 +92,7 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 | `dsh-git-guard` | git 归属守卫：拦下缺 agent 前缀的 commit、越界的 reset/amend/branch/worktree/merge/tag/config 等写操作 |
 | `dsh-file-guard` | 文件漂移守卫：每轮收尾比对「本会话写过的文件」与磁盘，发现被外部覆盖/回退时提示（不自动改回） |
 | `dsh-path-rules` | 第五权限模式「路径规则」的逐调用闸门：项目内可读写 / 项目外读允许·写审批 / 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行；只在预设身份为 `path-rules` 时介入（2026-10-17 起承接退役的 `sandbox-path-allowlist` 白名单能力；2026-10-18 起 `autoWhitelist` 可把用户批准的升权写入目录自动记入白名单） |
+| `dsh-write-guard` | 第六权限模式「完全权限（拦截）」的逐调用写入闸门：读任意文件 / 项目内 / 白名单写入直通；越界写入弹框确认并自动学习白名单；判不出的 `bash`·`pwsh` 交当前会话模型判定。只在预设身份为 `write-guard` 时介入（2026-10-21 新增），其余档位零影响；**插件停用 = 完全不拦截** |
 | `dsh-readonly-guard` | 只读守卫：bash 只读命令放行，可能改系统的默认转 DSH 原生审批；**默认停用** |
 
 ### `@gavinc-cn/dsh-plugins`（聚合元包）
@@ -106,8 +115,8 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 packages/
   ui/          6 个面向 Web GUI 的组件包（4 个声明 dsh.client.platform: "web"；dsh-patch-ask-expand 宿主侧实现；
               kanban-board 不随 bundle 下发）
-  runtime/     8 个宿主（node）侧组件包（sandbox-path-allowlist 不随 bundle 下发）
-  bundles/     dsh-plugins-ui（UI 5 行）/ dsh-plugins-runtime（运行时 7 行）/ dsh-plugins（聚合元包）
+  runtime/     9 个宿主（node）侧组件包（sandbox-path-allowlist 不随 bundle 下发）
+  bundles/     dsh-plugins-ui（UI 5 行）/ dsh-plugins-runtime（运行时 8 行）/ dsh-plugins（聚合元包）
 scripts/
   deploy-to-dsh.sh     把仓库铺到 dsh 实际加载的「共享活副本」~/.dsh/profiles/node_modules/@gavinc-cn/
   check-bundles.mjs    结构校验：行 id 全局唯一、行 ∈ dependencies、目录名 = 包名短名
@@ -139,8 +148,10 @@ bash scripts/deploy-to-dsh.sh                # 铺到共享活副本（patch 层
 
 ## 发布
 
-顺序有硬依赖：**14 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败；
-其中 `dsh-readonly-guard` 与 `dsh-path-rules` 必须先于运行时 bundle 上 registry）。
+顺序有硬依赖：**15 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败；
+其中 `dsh-readonly-guard` 与 `dsh-path-rules` 必须先于运行时 bundle 上 registry；`dsh-write-guard`
+依赖 `dsh-path-rules` 的 subpath exports，所以 `dsh-path-rules` → `dsh-write-guard` → 运行时 bundle
+这个顺序不能反）。
 
 ```bash
 npm publish <tarball> --registry=https://registry.npmjs.org --access public
