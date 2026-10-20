@@ -22,14 +22,14 @@
 [@gavinc-cn/dsh-plugins-ui](../dsh-plugins-ui/README.md)。归属判据自 2026-10-15 起是
 **「面向谁」而不是「代码跑在哪」**：`dsh-patch-ask-expand` 的运行体确实在宿主侧（启动时对官方
 `dsh-client-ui-tool` 的 client bundle 打文本补丁），但它是纯 GUI 观感功能 ⇒ 归 UI 包，
-免得「只想装 UI 包」的人发现不了它。两个包合起来 = **12 行**（UI 5 + 本包 7）。
+免得「只想装 UI 包」的人发现不了它。两个包合起来 = **13 行**（UI 5 + 本包 8）。
 `kanban-board` 与 `sandbox-path-allowlist` 不随任何 bundle 下发（后者 2026-10-17 由
 `dsh-path-rules` 合并退役，白名单能力由它的 `approval/request` 监听承接）。
 
 ## 安装
 
 ```bash
-# 装进某个 profile（pnpm 会把依赖里的 7 个组件包一并装上）
+# 装进某个 profile（pnpm 会把依赖里的 8 个组件包一并装上）
 dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 ```
 
@@ -40,7 +40,7 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 - 改了 `dsh.profile.bundles` 要**重启宿主**才生效（启动时读）；profile patch 层是 live 热重载，
   行级开关不需要重启。
 
-## 组件（7 个）
+## 组件（8 个）
 
 | 行 id | 包 | 做什么 |
 |---|---|---|
@@ -50,6 +50,7 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 | `dsh-git-guard` | `@gavinc-cn/dsh-git-guard` | git 操作归属守卫（按提交前缀/分支命名判定，拦下越权 git 写操作） |
 | `dsh-file-guard` | `@gavinc-cn/dsh-file-guard` | 回合收尾比对「本会话写下的文件」与磁盘漂移，只报告不自动改回 |
 | `dsh-path-rules` | `@gavinc-cn/dsh-path-rules` | 第五权限模式「路径规则」的逐调用闸门：项目内可读写 / 项目外读允许·写审批 / 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行。**只在预设身份为 `path-rules` 时介入**，其余四档完全空转（2026-10-17 起，承接退役的 `sandbox-path-allowlist` 白名单能力；2026-10-18 起 `autoWhitelist` 可把用户批准的升权写入目录自动记入白名单）。**v2（0.1.2）起本档是 `workspace-write` 的超集**：判不出读写的命令不再命令级拒绝（`unanalyzable: pass`，交给沙箱在运行时拦写）、白名单写预置升权一次成功（`preemptiveWhitelistEscalation`）、判不出的命令做黑名单文本粗检（`opaqueBlacklistScan`） |
+| `dsh-write-guard` | `@gavinc-cn/dsh-write-guard` | 第六权限模式「完全权限（拦截）」的逐调用写入闸门：读任意文件 / 项目内 / 白名单写直通，越界写弹框并自动学习白名单，判不出的 `bash`·`pwsh` 交当前会话模型判定。**只在预设身份为 `write-guard` 时介入**，其余档位完全空转；插件停用 = 完全不拦截 |
 | `dsh-readonly-guard` | `@gavinc-cn/dsh-readonly-guard` | bash 只读闸门：只读命令放行，可能改系统的转 DSH 原生审批。包内默认 `disabled: true` |
 
 行 id 的约定是**包名去掉 scope**（`@gavinc-cn/dsh-memory` → `dsh-memory`）：profile 覆盖行按它命中，
@@ -74,6 +75,7 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 | `dsh-superpowers-priming` | `skillPath`（或 env `SUPERPOWERS_SKILL_PATH`） | `~/superpowers/skills/using-superpowers/SKILL.md`（文件不存在只记日志、不注入） |
 | `dsh-file-guard` | `stateRoot`（或 env `FILE_GUARD_ROOT`） | `~/.orca/file-guard` |
 | `dsh-path-rules` | `whitelist` / `blacklist`（绝对路径数组）、`activationPreset`、`unanalyzable`、`failMode`、`dryRun`、`autoWhitelist` / `autoWhitelistFile`、`preemptiveWhitelistEscalation`、`opaqueBlacklistScan`、`logPath` | 白/黑名单默认 `[]`（只按项目内/外判定）；`activationPreset: path-rules`、`unanalyzable: pass`（v2 默认；`deny` / `ask` 可改回严格）、`failMode: closed`、`allowTempRoots: true`、`autoWhitelist: false`（状态文件缺省 `<dsh home>/path-rules/auto-whitelist.json`）、`preemptiveWhitelistEscalation: true`、`opaqueBlacklistScan: true` |
+| `dsh-write-guard` | `enabled` / `activationPreset` / `whitelist` / `allowTempRoots` / `judge` / `judgeTimeoutMs` / `judgeCacheSize` / `autoWhitelist` / `autoWhitelistFile` / `failMode` / `dryRun` / `logPath` | `activationPreset: write-guard`、`whitelist: []`、`allowTempRoots: true`、`judge: true`、`judgeTimeoutMs: 20000`、`autoWhitelist: true`、`failMode: ask`；`autoWhitelistFile` 缺省 `<dsh home>/write-guard/auto-whitelist.json`、`judgeCacheSize: 200`、`dryRun: false`、`logPath` 缺省 `~/.kimi-code/hooks/logs/write_guard.dsh.log` |
 | `dsh-readonly-guard` | `enabled` / `dryRun` / `askMode` / `whitelistPath` / `pendingPath` / `logPath` | 行默认 `disabled: true`；`whitelistPath`/`pendingPath` 缺省与 kimi 共用 `~/.kimi-code/readonly_whitelist.json` / `readonly_pending.jsonl` |
 | 各组件 | `logPath` / `enabled` / `dryRun` | 日志在 `~/.kimi-code/hooks/logs/`，默认启用 |
 
