@@ -1,0 +1,35 @@
+{
+  "name": "@gavinc-cn/dsh-write-guard",
+  "title": "写入守卫",
+  "description": "第六权限档「完全权限（拦截）」的逐调用写入闸门：读放行、项目内/白名单写放行、越界写弹框并自动学习白名单、判不出的命令交当前会话模型判定。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "scripts": {
+    "test": "node --test test/config.test.mjs test/decide.test.mjs test/judge.test.mjs test/whitelist.test.mjs test/plugin.test.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/dsh-write-guard"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/dsh-write-guard#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "dependencies": {
+    "@gavinc-cn/dsh-path-rules": "^0.1.3"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

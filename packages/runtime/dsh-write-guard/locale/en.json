@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Write guard",
+    "description": "Writes inside the session workspace and allowlisted roots pass through; out-of-bounds writes require approval and are learned into the allowlist; ambiguous commands are judged by the current session model."
+  }
+}
