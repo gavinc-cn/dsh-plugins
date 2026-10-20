@@ -1,6 +1,6 @@
 {
   "name": "@gavinc-cn/dsh-plugins",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "DSH 自研插件的聚合元包：自身不是 bundle（不含任何配置行），只把 @gavinc-cn/dsh-plugins-ui 与 @gavinc-cn/dsh-plugins-runtime 一起装上。",
   "license": "MIT",
   "repository": {
