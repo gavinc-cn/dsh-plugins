@@ -14,7 +14,7 @@ matcher 是 `startup|clear|compact`；而 DSH 的 agent 只有两种创建来源
 
 而"该不该补"不能只看是不是 `resume`：
 
-- 会话建好后**用过**才重开的 → 历史里已经有那条注入消息，模型重放历史时看得到 ⇒ 再注入就是重复（单份约 3405 字符 ≈ 950 tokens）；
+- 会话建好后**用过**才重开的 → 历史里已经有那条注入消息，模型重放历史时看得到 ⇒ 再注入就是重复（单份约 3k 字符：2026-10-24 实测本机配置的 `SKILL.md` 为 3180 字符，随上游更新变化）；
 - 会话建好后**从没用过**就重开的（点了新建任务、隔天才来提问）→ `agent.inject()` 只落在内存 inbox 里，
   agent 被 dispose 时连同 inbox 一起消失，**日志里一个字节都没有** ⇒ 历史里确实缺这段开场说明。
 
@@ -23,7 +23,7 @@ matcher 是 `startup|clear|compact`；而 DSH 的 agent 只有两种创建来源
 `agent/created` 且 `source` 命中配置的 `sources`（默认 `['resume']`）时：
 
 1. 跳过子代理会话（`origin === 'subagent'` 或 `delegationDepth > 0`）；
-2. `ctx.sessionQuery.readSession(sessionId)` 读一次会话日志（非 deprecated 的异步读，不再用 `session.snapshotEvents()`）；
+2. 先 `ctx.get('sessionQuery')`、再回退 `ctx.sessionQuery` 取会话查询服务（只要求有 `readSession`），调 `readSession(sessionId)` 读一次会话日志（非 deprecated 的异步读，不再用 `session.snapshotEvents()`）；服务缺失或读失败都在下游静默降级为「不注入」；
 3. 扫有没有 priming 消息 —— `user/message` 且 `source.kind ∈ { 'hooks-claude-code'（桥接注入，老会话就是它）, 'superpowers-priming'（本插件） }`：
    - 有 → `skip:already-primed`，不注入；
    - 没有 → `agent.inject()` 一份 `using-superpowers` 全文（首行标明执行者），`source.kind = 'superpowers-priming'`。

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Dimmed UI text",
-    "description": "Dims the Web GUI text hierarchy one step via ctx.theme.overrideTokens (dark theme only)."
+    "description": "Dims the Web GUI text hierarchy, with High/Medium/Low brightness levels on the plugin page (the current look is the High level), via ctx.theme.overrideTokens (dark theme only)."
   }
 }

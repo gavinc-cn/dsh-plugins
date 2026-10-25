@@ -33,6 +33,7 @@ import { tmpdir } from 'node:os'
 import { analyzeCommand, tokenizeShell } from '@gavinc-cn/dsh-path-rules/analyze'
 import { classifyTool } from '@gavinc-cn/dsh-path-rules/classify'
 import { normalizePath, underRoot } from '@gavinc-cn/dsh-path-rules/rules'
+import { baseNameOf, commandWordIndex } from './shellwords.mjs'
 
 /** 审计理由的固定标记（与 spec §5.6 一致，模型/日志可见）。 */
 const REASON_PREFIX = '[write-guard] '
@@ -133,6 +134,110 @@ function projectLabel(project) {
   return typeof project === 'string' && project.length > 0 ? project : '(未知)'
 }
 
+/** 模型说明（agentBrief）进弹窗/日志前的最大字符数。 */
+const MAX_AGENT_BRIEF_CHARS = 300
+
+/** judge 理由进弹窗前的最大字符数（完整理由仍写审计 reason 与日志）。 */
+const MAX_DISPLAY_REASON_CHARS = 300
+
+/**
+ * 把任意文本压成单行并截断到 `limit` 字符（超出补 `…`）。
+ *
+ * @param value - 任意值（非字符串按空串处理）。
+ * @param limit - 最大字符数。
+ * @returns {string} 单行文本；空输入返回空串。
+ */
+function clipText(value, limit) {
+  if (typeof value !== 'string') return ''
+  const singleLine = value.replace(/\s+/g, ' ').trim()
+  if (singleLine.length <= limit) return singleLine
+  return `${singleLine.slice(0, limit)}…`
+}
+
+/**
+ * 汇总「已读取/未读取脚本」的一句话展示文案（中英 + 审计）。
+ *
+ * `zh` / `en` 供审批卡 headline 直接拼接；`audit` 供审计 reason 使用。没有脚本信息时
+ * 返回 null，调用方保持原文案不变（保证非脚本路径的文案与既有测试一致）。
+ *
+ * @param {{scripts?:object[], skipped?:object[]}|null} inspected - `inspectScripts` 的结果。
+ * @returns {{zh:string, en:string, audit:string}|null}
+ */
+function scriptSummary(inspected) {
+  const scripts = Array.isArray(inspected?.scripts) ? inspected.scripts : []
+  const skipped = Array.isArray(inspected?.skipped) ? inspected.skipped : []
+  if (scripts.length === 0 && skipped.length === 0) return null
+
+  const paths = scripts.map((item) => (typeof item?.path === 'string' ? item.path : '')).filter(Boolean)
+  const totalBytes = scripts.reduce(
+    (bytes, item) => bytes + (typeof item?.bytes === 'number' ? item.bytes : 0),
+    0,
+  )
+  const hashes = scripts
+    .map((item) => (typeof item?.sha256 === 'string' ? item.sha256.slice(0, 12) : ''))
+    .filter(Boolean)
+  const skippedText = skipped
+    .map((item) => {
+      const detail = typeof item?.detail === 'string' && item.detail.length > 0 ? item.detail : '(未知)'
+      const reason = typeof item?.reason === 'string' && item.reason.length > 0 ? item.reason : 'unknown'
+      return `${detail}（${reason}）`
+    })
+    .join('、')
+
+  const zhParts = []
+  const enParts = []
+  if (paths.length > 0) {
+    zhParts.push(`已读取脚本 ${paths.join('、')}（共 ${totalBytes} 字节，sha256 前缀 ${hashes.join('、')}）`)
+    enParts.push(`Read script(s) ${paths.join(', ')} (${totalBytes} bytes)`)
+  }
+  if (skippedText.length > 0) {
+    zhParts.push(`未读取脚本：${skippedText}`)
+    enParts.push(`Unread script(s): ${skippedText}`)
+  }
+  return {
+    zh: `${zhParts.join('；')}；`,
+    en: `${enParts.join('; ')}; `,
+    audit: zhParts.join('；'),
+  }
+}
+
+/**
+ * 把「原 agent 的意图说明」附加到 ask 的审计理由与展示文案上（spec §5.6）。
+ *
+ * 说明来源按优先级由调用方决定：bash/pwsh 的 `description`、沙箱升权的 `justification`，
+ * 或（write/edit 没有说明参数时）当前 assistant 消息正文。传函数时**只在 ask 时解析**：
+ * 读会话派生消息有成本，allow/pass 不应为它多走一趟。
+ * 超过 300 字符压单行截断；只影响 ask，非 ask 或无说明时原样返回。
+ *
+ * @param {object} decision - `decideCall` 的结论。
+ * @param {string|(() => string)} [brief] - 模型说明原文，或惰性求值的说明来源。
+ * @returns {object} 附加说明后的结论。
+ */
+function attachAgentBrief(decision, brief) {
+  if (decision?.kind !== 'ask') return decision
+  let text = ''
+  if (typeof brief === 'function') {
+    try {
+      text = brief()
+    } catch {
+      // 说明来源只是展示用：取不到就按无说明处理，绝不让异常影响判定。
+      text = ''
+    }
+  } else {
+    text = brief
+  }
+  const clipped = clipText(text, MAX_AGENT_BRIEF_CHARS)
+  if (clipped.length === 0) return decision
+  return {
+    ...decision,
+    reason: `${decision.reason}（模型说明：${clipped}）`,
+    displayReason: {
+      zh: `${decision.displayReason?.zh ?? ''}（模型说明：${clipped}）`,
+      en: `${decision.displayReason?.en ?? ''} (agent note: ${clipped})`,
+    },
+  }
+}
+
 /** 临时区根列表：`/tmp` 与 `os.tmpdir()` 各自归一化后去重（spec §5.2）。 */
 export function tempRoots() {
   const roots = []
@@ -226,52 +331,6 @@ export function isIgnoredWriteSink(target, platform = process.platform) {
 function isSinkCandidate(target) {
   if (hasDotDotSegment(target)) return false
   return isIgnoredWriteSink(target)
-}
-
-/** 取路径的最后一段（同时认 `/` 与 `\`，用于 Windows 风格的命令词）。 */
-function baseNameOf(word) {
-  return String(word ?? '').split(/[\\/]/).pop() ?? ''
-}
-
-/** `env` 里带取值的选项：值不是命令词，必须连同值一起跳过（否则 `env -u FOO ln …` 会漏判）。 */
-const ENV_VALUE_OPTIONS = new Set(['-u', '--unset', '-C', '--chdir'])
-
-/**
- * 取一段命令词里的「命令词」下标：跳过前缀环境变量赋值与 `env` 包装。
- *
- * 为什么跳过 `env`：`env ln -s /etc /proj/etc` 的 words[0] 是 `env`，但真正建链的是
- * `ln`；分析器会把 `env` 递归成 `ln` 的写目标，若不在这里识别建链就会漏掉（I2）。
- *
- * @param words - `tokenizeShell` 的段内普通词列表。
- * @returns 命令词下标；没有可识别的命令词返回 -1。
- */
-function commandWordIndex(words) {
-  if (!Array.isArray(words) || words.length === 0) return -1
-  let index = 0
-  while (index < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index])) index += 1
-  if (index >= words.length) return -1
-  if (baseNameOf(words[index]).toLowerCase() !== 'env') return index
-  index += 1
-  // 跳过 env 的选项与 NAME=value；`-u NAME`/`-C DIR` 的值段不能被误当成命令词。
-  while (index < words.length) {
-    const word = words[index]
-    if (word === '--') {
-      index += 1
-      break
-    }
-    const eq = word.indexOf('=')
-    const name = eq === -1 ? word : word.slice(0, eq)
-    if (ENV_VALUE_OPTIONS.has(name)) {
-      index += eq === -1 ? 2 : 1
-      continue
-    }
-    if (word.startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
-      index += 1
-      continue
-    }
-    break
-  }
-  return index < words.length ? index : -1
 }
 
 /**
@@ -540,28 +599,34 @@ function outsideDisplay(outsideTargets, project) {
   }
 }
 
-/** judge 认为不安全的展示理由。 */
-function unsafeDisplay(outsideTargets) {
+/** judge 认为不安全的展示理由（带 judge 理由与已读脚本摘要，spec §5.6）。 */
+function unsafeDisplay(outsideTargets, judgeReason, scriptDesc) {
   const list = outsideTargets.length > 0 ? outsideTargets.join('、') : '未给出具体路径'
+  const reasonText = clipText(judgeReason, MAX_DISPLAY_REASON_CHARS) || '未给出理由'
+  const scriptZh = scriptDesc?.zh ?? ''
+  const scriptEn = scriptDesc?.en ?? ''
   return {
-    zh: `AI 判定这条命令可能修改项目/白名单之外的文件（${list}），需要你确认。`,
-    en: `The AI judge considers this command may modify files outside the project and whitelist (${list}); please confirm.`,
+    zh: `AI 判定这条命令可能修改项目/白名单之外的文件（${list}）：${reasonText}；${scriptZh}需要你确认。`,
+    en: `The AI judge considers this command may modify files outside the project and whitelist (${list}): ${reasonText}. ${scriptEn}Please confirm.`,
   }
 }
 
-/** judge 无法判断的展示理由。 */
-function unknownDisplay() {
+/** judge 无法判断的展示理由（带 judge 理由与已读脚本摘要，spec §5.6）。 */
+function unknownDisplay(judgeReason, scriptDesc) {
+  const reasonText = clipText(judgeReason, MAX_DISPLAY_REASON_CHARS)
+  const judgeZh = reasonText.length > 0 ? `（AI 理由：${reasonText}）` : ''
+  const judgeEn = reasonText.length > 0 ? ` (AI reason: ${reasonText})` : ''
   return {
-    zh: '这条命令无法静态判定，AI 也无法确认它只写项目/白名单内，需要你确认。',
-    en: 'This command cannot be statically analyzed and the AI could not confirm it only writes inside the project and whitelist; please confirm.',
+    zh: `这条命令无法静态判定，AI 也无法确认它只写项目/白名单内${judgeZh}，需要你确认。${scriptDesc?.zh ?? ''}`,
+    en: `This command cannot be statically analyzed and the AI could not confirm it only writes inside the project and whitelist${judgeEn}; please confirm. ${scriptDesc?.en ?? ''}`,
   }
 }
 
-/** judge 不可用的展示理由。 */
-function unavailableDisplay() {
+/** judge 不可用的展示理由（带已读脚本摘要）。 */
+function unavailableDisplay(scriptDesc) {
   return {
-    zh: '这条命令无法静态判定，且 AI 判定当前不可用，需要你确认。',
-    en: 'This command cannot be statically analyzed and the AI judge is currently unavailable; please confirm.',
+    zh: `这条命令无法静态判定，且 AI 判定当前不可用，需要你确认。${scriptDesc?.zh ?? ''}`,
+    en: `This command cannot be statically analyzed and the AI judge is currently unavailable; please confirm. ${scriptDesc?.en ?? ''}`,
   }
 }
 
@@ -600,13 +665,21 @@ function decideWriteTargets(targets, base, roots) {
  * judge 返回 `safe` → JUDGE_SAFE；`unsafe` → JUDGE_UNSAFE；其余（unknown/非法枚举/
  * 缺失/抛错）→ JUDGE_UNKNOWN。`unsafe`/`unknown` 的 targets 取 `outsidePaths` 归一化结果。
  *
+ * 脚本内容（spec §5.9）：`inspected` 来自 `context.inspectScripts`（已读取的脚本内容 +
+ * 未读取原因），原样进 judge 入参；弹窗文案同时带「已读/未读脚本」摘要，便于用户判断。
+ *
  * @param effect - `classifyTool` 的 shell 结果。
  * @param base - 解析后的工作目录（同时作为 outsidePaths 的归一化基准）。
  * @param analysis - `analyzeCommand` 的 `unanalyzable`（`{reason, fragment}`）。
  * @param context - `{config, judge}`。
+ * @param {{scripts?:object[], skipped?:object[]}|null} [inspected] - `inspectScripts` 的结果。
  */
-async function decideUnanalyzable(effect, base, analysis, context) {
+async function decideUnanalyzable(effect, base, analysis, context, inspected) {
   const reasonText = typeof analysis?.reason === 'string' ? analysis.reason : '(原因未知)'
+  const scriptDesc = scriptSummary(inspected)
+  const scriptAudit = scriptDesc ? `；${scriptDesc.audit}` : ''
+  const scripts = Array.isArray(inspected?.scripts) ? inspected.scripts : []
+  const scriptSkips = Array.isArray(inspected?.skipped) ? inspected.skipped : []
   const judge = context?.judge
   // spec §4.3-③：`judge=false` 即禁用，不依赖 index 是否把回调传成 null（两种写法都兜住）。
   const judgeEnabled = context?.config?.judge !== false
@@ -614,8 +687,8 @@ async function decideUnanalyzable(effect, base, analysis, context) {
     const why = judgeEnabled ? '未注入 judge 回调' : '配置 judge=false'
     return ask(
       'JUDGE_DISABLED',
-      `命令无法静态判定（${reasonText}），AI 判定不可用（${why}），需要确认`,
-      unavailableDisplay(),
+      `命令无法静态判定（${reasonText}），AI 判定不可用（${why}），需要确认${scriptAudit}`,
+      unavailableDisplay(scriptDesc),
       [],
     )
   }
@@ -627,14 +700,16 @@ async function decideUnanalyzable(effect, base, analysis, context) {
       shell: effect.shell,
       workdir: base,
       analysis: analysis ?? null,
+      scripts,
+      scriptSkips,
     })
   } catch (error) {
     // judge 回调抛错（模型/网络失败）按「无法判断」处理，绝不误放行。
     const message = error instanceof Error ? error.message : String(error)
     return ask(
       'JUDGE_UNKNOWN',
-      `命令无法静态判定（${reasonText}），AI 判定失败：${message}`,
-      unknownDisplay(),
+      `命令无法静态判定（${reasonText}），AI 判定失败：${message}${scriptAudit}`,
+      unknownDisplay('', scriptDesc),
       [],
     )
   }
@@ -651,15 +726,15 @@ async function decideUnanalyzable(effect, base, analysis, context) {
     const paths = outside.length > 0 ? outside.join(', ') : '未给出'
     return ask(
       'JUDGE_UNSAFE',
-      `AI 判定该命令可能修改项目/白名单之外的文件：${judgeReason}（可疑路径：${paths}）`,
-      unsafeDisplay(outside),
+      `AI 判定该命令可能修改项目/白名单之外的文件：${judgeReason}（可疑路径：${paths}）${scriptAudit}`,
+      unsafeDisplay(outside, judgeReason, scriptDesc),
       outside,
     )
   }
   return ask(
     'JUDGE_UNKNOWN',
-    `命令无法静态判定，AI 也无法确认是否只写项目/白名单内：${judgeReason}`,
-    unknownDisplay(),
+    `命令无法静态判定，AI 也无法确认是否只写项目/白名单内：${judgeReason}${scriptAudit}`,
+    unknownDisplay(judgeReason, scriptDesc),
     outside,
   )
 }
@@ -678,10 +753,12 @@ async function decideUnanalyzable(effect, base, analysis, context) {
  * 这类"未收录命令 + 唯一写目标是标准流"会在分析器判不出时被提前放行、绕过 AI 判定。
  *
  * @param exec - `tools/pre-execute` 的 exec（只读 `name` / `arguments`）。
- * @param context - `{config, cwd, roots, judge}`：
+ * @param context - `{config, cwd, roots, judge, inspectScripts, agentBrief}`：
  *   `roots` 为已归一化的 `{project, whitelist, temp}`；`judge` 为
- *   `async ({command, shell, workdir, analysis}) => {decision, outsidePaths, reason}`，
- *   禁用时传 `null`。
+ *   `async ({command, shell, workdir, analysis, scripts, scriptSkips}) =>
+ *   {decision, outsidePaths, reason}`（禁用时传 `null`）；
+ *   `inspectScripts` 为同步脚本读取回调（返回 `{scripts, skipped}`，可缺省）；
+ *   `agentBrief` 是原 agent 的意图说明（字符串或返回字符串的惰性函数；进 ask 文案，可缺省）。
  * @returns {Promise<{kind:'pass'} | {kind:'allow', code:string} |
  *   {kind:'ask', code:string, reason:string, displayReason:{zh:string,en:string}, targets:string[]}>}
  */
@@ -698,9 +775,11 @@ export async function decideCall(exec, context) {
   if (effect.kind === 'pass' || effect.kind === 'read') return pass()
 
   const roots = effectiveRoots(context)
+  // 所有 ask 统一附加「原 agent 的意图说明」（spec §5.6）；allow/pass 不受影响。
+  const emit = (decision) => attachAgentBrief(decision, context?.agentBrief)
 
   if (effect.kind === 'write') {
-    return decideWriteTargets(effect.targets, resolveWorkdir(effect, cwd), roots)
+    return emit(decideWriteTargets(effect.targets, resolveWorkdir(effect, cwd), roots))
   }
 
   // ③ shell：先静态分析；命中本层保守规则（~ / 建链/链接传播 / heredoc 内命令替换）或
@@ -712,7 +791,23 @@ export async function decideCall(exec, context) {
   const risk = detectUnanalyzableRisk(effect)
   const unanalyzable = risk ?? analysis?.unanalyzable ?? null
   // review C1：unanalyzable 必须**先**走 judge，不能因为写目标全是 sink 就提前放行。
-  if (unanalyzable !== null) return decideUnanalyzable(effect, base, unanalyzable, context)
+  if (unanalyzable !== null) {
+    // spec §5.9：判不出的命令若引用了脚本，先做受限读取，把内容交给 judge（读不到则保持保守）。
+    let inspected = null
+    if (typeof context?.inspectScripts === 'function' && context?.config?.inspectScripts !== false) {
+      try {
+        inspected = context.inspectScripts({
+          command: effect.command,
+          shell: effect.shell,
+          workdir: base,
+        })
+      } catch {
+        // 读取回调异常不能影响判定主流程：按「没读到脚本」处理（judge 仍会保守）。
+        inspected = null
+      }
+    }
+    return emit(await decideUnanalyzable(effect, base, unanalyzable, context, inspected))
+  }
 
   const writes = Array.isArray(analysis?.writes) ? analysis.writes : []
   // 只有可分析命令才剔除 sink：含 `..` 的路径不算 sink（C2），仍按归一化后的真实落点分类。
@@ -721,5 +816,5 @@ export async function decideCall(exec, context) {
   if (fileWrites.length === 0) return allow('READ_ONLY')
 
   // ④ 逐写目标分类；多目标任一越界 ⇒ 合并成一条 ask。
-  return decideWriteTargets(fileWrites, base, roots)
+  return emit(decideWriteTargets(fileWrites, base, roots))
 }

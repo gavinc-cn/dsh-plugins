@@ -19,8 +19,8 @@ window.__ModuleLoader__.load({
 //     - agent 提问/请求审批 → 自动移入"阻塞", 卡片可直接回答
 //     - 问题被回答 → 自动回到"正在开发"
 //     - 主界面增删改工作区 → 左侧工作区栏实时同步
-//  4. 看板状态持久化: 动态版经包内 RPC (kanban/load|save);
-//     静态版(路线 B)由 _build.js 转成 localStorage (见 kanban-board/_build.js)
+//  4. 看板状态持久化: 全部落浏览器 localStorage (键 kanban-board-state / 看板设置键 / 评论草稿键,
+//     见本文件 :308-329); 早期「包内 RPC (kanban/load|save) + _build.js」方案已废弃, 仓库无该文件
 
 // ── 会话工作目录解析 (不再硬编码机器路径) ──────────────────────────────────
 // 以前这里是一个写死的常量 TASK_CWD (某个开发机的绝对路径), 换机器/换用户就错,

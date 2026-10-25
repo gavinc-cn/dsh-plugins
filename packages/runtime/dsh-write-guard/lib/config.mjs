@@ -25,6 +25,9 @@ export const DEFAULT_LOG_PATH = join(homedir(), '.kimi-code', 'hooks', 'logs', '
 /** failMode 允许的取值（插件内部异常时的兜底策略）。 */
 const FAIL_MODES = ['ask', 'deny', 'open']
 
+/** 单个脚本文件送判定前的缺省字节上限（spec §5.9）。 */
+export const DEFAULT_SCRIPT_MAX_BYTES = 16384
+
 /**
  * 构造统一形状的配置错误：前缀固定，消息里点名字段，便于宿主/用户定位。
  *
@@ -193,12 +196,30 @@ function readJudgeCacheSize(source) {
 }
 
 /**
+ * 读取 scriptMaxBytes：正整数（字节数），缺省 {@link DEFAULT_SCRIPT_MAX_BYTES}。
+ *
+ * 0 / 负数 / 小数 / 字符串都拒绝：0 会让脚本判定永远读不到内容，小数没有意义。
+ *
+ * @param source - 原始 config 对象。
+ * @returns {number}
+ */
+function readScriptMaxBytes(source) {
+  const value = source.scriptMaxBytes
+  if (value === undefined) return DEFAULT_SCRIPT_MAX_BYTES
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw configError('scriptMaxBytes', `必须是正整数（字节数），收到 ${describeValue(value)}`)
+  }
+  return value
+}
+
+/**
  * 归一化插件配置：校验 + 补默认值，返回完整 Config。
  *
  * 字段与缺省值（spec §5.8）：
  *   enabled=true、activationPreset='write-guard'、whitelist=[]、allowTempRoots=true、
- *   judge=true、judgeTimeoutMs=20000、judgeCacheSize=200、autoWhitelist=true、
- *   autoWhitelistFile=''、failMode='ask'、dryRun=false、logPath=DEFAULT_LOG_PATH。
+ *   judge=true、judgeTimeoutMs=20000、judgeCacheSize=200、inspectScripts=true、
+ *   scriptMaxBytes=DEFAULT_SCRIPT_MAX_BYTES、autoWhitelist=true、autoWhitelistFile=''、
+ *   failMode='ask'、dryRun=false、logPath=DEFAULT_LOG_PATH。
  *
  * 空值语义（spec §5.8）：`autoWhitelistFile`/`logPath` 缺失、`null`、`''`、纯空白
  * 都回落到默认值；`activationPreset` 先 trim，trim 后为空则抛错；`failMode` 按
@@ -206,8 +227,9 @@ function readJudgeCacheSize(source) {
  *
  * @param raw - 宿主传入的原始 config（可为 undefined / null）。
  * @returns {{enabled:boolean, activationPreset:string, whitelist:string[], allowTempRoots:boolean,
- *   judge:boolean, judgeTimeoutMs:number, judgeCacheSize:number, autoWhitelist:boolean,
- *   autoWhitelistFile:string, failMode:'ask'|'deny'|'open', dryRun:boolean, logPath:string}}
+ *   judge:boolean, judgeTimeoutMs:number, judgeCacheSize:number, inspectScripts:boolean,
+ *   scriptMaxBytes:number, autoWhitelist:boolean, autoWhitelistFile:string,
+ *   failMode:'ask'|'deny'|'open', dryRun:boolean, logPath:string}}
  * @throws {Error} 任一字段非法时抛错（前缀 `dsh-write-guard: `，消息点名字段）。
  */
 export function normalizeConfig(raw = {}) {
@@ -223,6 +245,8 @@ export function normalizeConfig(raw = {}) {
     judge: readBoolean(source, 'judge', true),
     judgeTimeoutMs: readJudgeTimeoutMs(source),
     judgeCacheSize: readJudgeCacheSize(source),
+    inspectScripts: readBoolean(source, 'inspectScripts', true),
+    scriptMaxBytes: readScriptMaxBytes(source),
     autoWhitelist: readBoolean(source, 'autoWhitelist', true),
     autoWhitelistFile: readPathString(source, 'autoWhitelistFile', ''),
     failMode: readFailMode(source),

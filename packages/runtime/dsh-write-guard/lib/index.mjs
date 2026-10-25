@@ -29,7 +29,15 @@ import { normalizePath, normalizeRoots } from '@gavinc-cn/dsh-path-rules/rules'
 
 import { normalizeConfig } from './config.mjs'
 import { decideCall, tempRoots } from './decide.mjs'
-import { JudgeCache, buildJudgeInput, judgeCacheKey, judgeCommand } from './judge.mjs'
+import { inspectScripts } from './script.mjs'
+import {
+  JudgeCache,
+  buildJudgeInput,
+  describeErrorChain,
+  formatJudgeDiagnostic,
+  judgeCacheKey,
+  judgeCommand,
+} from './judge.mjs'
 import {
   deriveLearnDirs,
   filterLearnDirs,
@@ -88,6 +96,66 @@ function describeCall(exec) {
     return `${toolName} ${text.length > 120 ? `${text.slice(0, 120)}…` : text}`
   } catch {
     return `${toolName} (arguments 不可读)`
+  }
+}
+
+/**
+ * 取模型在工具参数里写的意图说明（spec §5.6：审批弹窗展示「原 agent 的说明」）。
+ *
+ * bash/pwsh 的 `description` 是模型必填的自由文本；沙箱升权类调用还可能带
+ * `justification`。这里只取这两种字符串，返回原文（单行化与 300 字符截断由 decide 负责）。
+ *
+ * @param exec - tools/pre-execute 的 exec（只读 arguments）。
+ * @returns {string} 模型说明；没有则空串。
+ */
+function extractAgentBrief(exec) {
+  try {
+    const args = exec?.arguments
+    if (typeof args?.description === 'string' && args.description.trim().length > 0) {
+      return args.description.trim()
+    }
+    if (typeof args?.justification === 'string' && args.justification.trim().length > 0) {
+      return args.justification.trim()
+    }
+    return ''
+  } catch {
+    // arguments 可能是抛错 getter：没有说明就按空处理。
+    return ''
+  }
+}
+
+/**
+ * 从当前 assistant 消息正文取「这条工具调用附带的意图说明」（spec §5.6，B-P2）。
+ *
+ * write/edit 没有 `description` 参数，但模型在发起调用的同一条 assistant 消息里写的正文
+ * 就是它当时的意图/范围说明。工具调用在 `assistant/message` 提交之后才进入 pre-execute
+ * （`dsh-agent-loop` 的 step：`session.append('assistant/message', …)` → `executeToolCalls`），
+ * 所以这里能读到本条消息。只取**最近一条** assistant 消息：更早的是上一步的旁白，
+ * 挂到当前写操作上会误导审批人（宁可不展示）。
+ *
+ * 用宿主公开的 `Session.deriveMessages()`（派生消息缓存，O(新增)），不读已废弃的
+ * `snapshotEvents()`；任何异常都按「没有说明」处理，绝不影响判定。
+ *
+ * @param session - 当前会话（可为 null）。
+ * @returns {string} 消息正文（多个 text 块按空格拼接）；没有则空串。
+ */
+function assistantBriefOf(session) {
+  try {
+    const messages = session?.deriveMessages?.()
+    if (!Array.isArray(messages)) return ''
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index]
+      if (message?.role !== 'assistant') continue
+      const blocks = Array.isArray(message.content) ? message.content : []
+      return blocks
+        .filter((block) => block?.type === 'text' && typeof block.text === 'string')
+        .map((block) => block.text)
+        .join(' ')
+        .trim()
+    }
+    return ''
+  } catch {
+    return ''
   }
 }
 
@@ -271,6 +339,9 @@ function renderRules(config, session, services) {
       '读取任何文件都允许，不会弹框。',
       '项目根/白名单之外的写入会弹框询问用户；用户批准后目标目录会自动加入白名单，下次同目录写入不再询问。',
       'bash/pwsh 中无法静态判定的复杂命令会先由 AI 判定；AI 判定可能越界或无法判断时也会询问用户。',
+      '当写入可能在项目根/白名单之外、或命令无法静态判定（含执行脚本）时，请在 bash 的 description 中写明意图和预计改动的文件/目录范围——审批框会展示这句话。',
+      'write/edit 没有 description 参数：预计写放行面之外时，请先在发起调用的那条消息正文里写明意图与范围——审批框会把它作为模型说明一并展示。',
+      '命令引用的项目/白名单/临时区内脚本会被读取内容交给 AI 判定（只判断、不执行）；读不到或读不全时仍会保守询问。',
     ]
     return lines.join('\n')
   } catch {
@@ -427,7 +498,7 @@ export function apply(ctx, rawConfig) {
    * judgeCommand 自身保证不抛；这里的 try/catch 只是防未来实现变化，任何异常都降级成
    * `unknown`（decideCall 会据此转 ask），绝不让异常冒到 pre-execute 外层。
    */
-  async function runJudge({ command, shell, workdir, analysis }, exec, cwd, roots) {
+  async function runJudge({ command, shell, workdir, analysis, scripts, scriptSkips }, exec, cwd, roots) {
     const input = buildJudgeInput({
       platform: process.platform,
       shell,
@@ -438,10 +509,24 @@ export function apply(ctx, rawConfig) {
       workdir,
       command,
       analysis,
+      // spec §5.9：已读取的脚本内容 / 未读取原因一并交给判定器。
+      scripts,
+      scriptSkips,
     })
     // 缓存按插件实例共享，判定输入含 project_root（本会话 cwd），因此项目根必须入键，
     // 否则不同项目根的会话在命令+workdir 相同时会误命中彼此结论（review finding 2）。
-    const cacheKey = judgeCacheKey({ projectRoot: cwd, shell, workdir, whitelistVersion, command })
+    // 脚本内容摘要（sha256）也必须入键：脚本一改，旧的 safe 结论不能复用（spec §5.9）。
+    const scriptDigest = Array.isArray(scripts)
+      ? scripts.map((item) => (typeof item?.sha256 === 'string' ? item.sha256 : '')).join(',')
+      : ''
+    const cacheKey = judgeCacheKey({
+      projectRoot: cwd,
+      shell,
+      workdir,
+      whitelistVersion,
+      scriptDigest,
+      command,
+    })
     let result
     try {
       result = await judgeCommand({
@@ -453,8 +538,23 @@ export function apply(ctx, rawConfig) {
         timeoutMs: config.judgeTimeoutMs,
       })
     } catch (error) {
-      log('judge-error', 'judge-exception', `${errorText(error)} | ${describeCall(exec)}`)
+      // judgeCommand 保证不抛；这里只防未来实现变化。异常自身可能带 cause 链，一并落盘。
+      const causeText = describeErrorChain(error)
+      log(
+        'judge-error',
+        'judge-exception',
+        `${errorText(error)}${causeText.length > 0 ? ` | cause: ${causeText}` : ''} | ${describeCall(exec)}`,
+      )
       return { decision: 'unknown', outsidePaths: [], reason: `AI 判定失败：${errorText(error)}` }
+    }
+    // 失败诊断（超时/流错误/解析失败/无路由）：单独记 judge-error，便于事后定位原因；
+    // 不改变判定与审批文案（spec §5.4 / §5.7）。
+    if (result?.diagnostic !== undefined && result.diagnostic !== null) {
+      log(
+        'judge-error',
+        String(result.diagnostic.stage ?? 'unknown'),
+        `${formatJudgeDiagnostic(result.diagnostic)} | ${describeCall(exec)}`,
+      )
     }
     log(
       result.decision === 'safe' ? 'judge-safe' : 'judge-ask',
@@ -608,14 +708,58 @@ export function apply(ctx, rawConfig) {
       const cwd = normalizePath(workspaceRoot ?? session?.header?.cwd ?? '', process.cwd())
       if (cwd.length === 0) return downstream
 
-      const roots = { project: cwd, whitelist: [...config.whitelist], temp: tempRoots() }
+      // 脚本读取的放行面必须与判定链同口径：allowTempRoots:false 时临时区既不算放行面，
+      // 也不能把临时区脚本自动读进模型上下文（spec §5.9）。
+      const roots = {
+        project: cwd,
+        whitelist: [...config.whitelist],
+        temp: config.allowTempRoots ? tempRoots() : [],
+      }
       const judge = config.judge
         ? (parts) => runJudge(parts, exec, cwd, roots)
         : null
+      // spec §5.9：判不出的命令若引用了项目/白名单/临时区内的脚本，decideCall 会调用本回调
+      // 读取内容；日志记录读了什么/跳过了什么，便于审计（读失败不影响主流程）。
+      const inspectScriptsFor = config.inspectScripts
+        ? ({ command, shell, workdir }) => {
+            try {
+              const inspected = inspectScripts(command, {
+                shell,
+                cwd: workdir,
+                roots,
+                maxBytes: config.scriptMaxBytes,
+              })
+              for (const script of inspected.scripts) {
+                log(
+                  'script-read',
+                  script.path,
+                  `sha256=${script.sha256.slice(0, 12)} bytes=${script.bytes} interpreter=${script.interpreter}`,
+                )
+              }
+              for (const item of inspected.skipped) {
+                log('script-skip', item.reason, item.detail ?? '')
+              }
+              return inspected
+            } catch (error) {
+              log('error', 'script-inspect', errorText(error))
+              return null
+            }
+          }
+        : undefined
 
       let decision
       try {
-        decision = await decideCall(exec, { config, cwd, roots, judge })
+        decision = await decideCall(exec, {
+          config,
+          cwd,
+          roots,
+          judge,
+          inspectScripts: inspectScriptsFor,
+          // spec §5.6：优先用工具参数里的 description/justification；write/edit 没有这两个
+          // 参数时回退到当前 assistant 消息正文。传函数是为了只在 ask 时才读派生消息
+          // （读一次会话历史不影响 allow 路径的性能）。
+          agentBrief: () => extractAgentBrief(exec) || assistantBriefOf(session),
+        })
       } catch (error) {
         log('gate-error', errorText(error), describeCall(exec))
         if (config.failMode === 'open') {

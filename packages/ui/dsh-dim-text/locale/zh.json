@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "界面文字调暗",
-    "description": "把 Web GUI 文字梯度整体调暗一档: 经官方扩展点 ctx.theme.overrideTokens 覆盖 --dsw-alias-label-primary/secondary/tertiary, 仅深色模式生效。"
+    "description": "把 Web GUI 文字梯度整体调暗, 插件页可选 高/中/低 三档亮度 (当前效果 = 最高档): 经官方扩展点 ctx.theme.overrideTokens 覆盖 --dsw-alias-label-primary/secondary/tertiary, 仅深色模式生效。"
   }
 }

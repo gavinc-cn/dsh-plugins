@@ -6,7 +6,8 @@ DSH（DeepSeek Harness）Web GUI 的任务看板插件：五列「待开发 / �
 ## 作用
 
 - 侧栏入口（`sidebar.footer.action`）开关 + `shell.overlay` 全屏看板。
-- **拖入「正在开发」** → `session.create` + `session.prompt` 自动创建会话交给 agent 执行。
+- **拖入「正在开发」** → 首次 `session.create` + `session.prompt` 创建会话交给 agent 执行；
+  之后该卡片复用同一会话（追问以对已有会话追加 prompt 的方式送达）。
 - 会话跑完 → 卡片自动移入「待审核」。
 - agent 提问 / 请求审批（`events.mux` 的提问帧）→ 卡片自动移入「阻塞」，可直接在卡片上回答；
   回答后自动回到「正在开发」。

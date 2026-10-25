@@ -938,7 +938,9 @@ const TAG_READ_FLAGS = new Set([
   '-l', '--list', '-n', '--contains', '--no-contains', '--merged',
   '--no-merged', '--points-at', '--sort', '--format',
 ])
-/** 删除选项（v9 归属：agent 只能删本会话新建且从未 push 的 tag）。 */
+/** 删除选项：**实际一律拒绝**——hook 无法判定 tag 是否「本会话新建」，故 `-d` 的所有分支都返回
+ * 拒绝（本地存在 ⇒ 不是本会话新建；不存在 ⇒ 无可删对象；远端查询失败 ⇒ 保守拒绝），
+ * 真回滚由用户手动执行（与 orca-git-ops v9 的口径一致）。 */
 const TAG_DELETE_FLAGS = new Set(['-d', '--delete'])
 /** 强制/覆盖选项：一切形式都拦——移动既有 tag 会改写归属（agent 只新建，绝不改写）。 */
 const TAG_FORCE_FLAGS = new Set(['-f', '--force'])

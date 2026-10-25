@@ -30,7 +30,7 @@ test/            node --test 单测 + 组件渲染测试（开发用，不随包
 | 键 | 默认 | 说明 |
 |---|---|---|
 | `disable` | `false` | 置 `true` 时不打补丁（可用来临时关掉） |
-| `bundlePath` | `<dsh home>/profiles/node_modules/@deepseek-ai/dsh-client-ui-tool/lib/client.js` | 目标文件 |
+| `bundlePath` | `~/.dsh/profiles/node_modules/@deepseek-ai/dsh-client-ui-tool/lib/client.js`（代码硬编码 `os.homedir()/.dsh`，**不读 `$DSH_HOME`**；自定义 DSH home 时用本键覆盖） | 目标文件 |
 | `logPath` | `<home>/.kimi-code/hooks/logs/patch_ask_expand.log` | 日志文件 |
 | `reapply` | `false` | 置 `true` 时周期性复查并重打补丁（用于 dsh 热升级后自动修复） |
 | `reapplyMs` | `5000` | 复查间隔（≥1000ms） |

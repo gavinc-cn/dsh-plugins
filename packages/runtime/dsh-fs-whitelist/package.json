@@ -1,0 +1,57 @@
+{
+  "name": "@gavinc-cn/dsh-fs-whitelist",
+  "title": "文件白名单根",
+  "description": "顶替官方本地文件系统 provider：在官方工作区 + 临时区之外，把白名单目录（含自动学习白名单）也算作 write/edit 的可写根（trusted-code 的 fs fence，不是内核边界），让白名单目录的写入不再走「沙箱拒 → 带 sandbox_permissions 升权重试」。默认停用。",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node --test test/config.test.mjs test/containment.test.mjs test/index.test.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "sandbox",
+    "filesystem"
+  ],
+  "dependencies": {
+    "@gavinc-cn/dsh-sandbox-whitelist": "^0.2.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-fs-sandbox": "*",
+    "@deepseek-ai/dsh-fs": "*",
+    "@deepseek-ai/dsh-sandbox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-fs-sandbox": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-fs": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-sandbox": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/dsh-fs-whitelist"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/dsh-fs-whitelist#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues"
+}

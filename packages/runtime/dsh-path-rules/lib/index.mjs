@@ -5,7 +5,13 @@
 //   classify.mjs 工具 → 读写意图
 //   analyze.mjs  bash / pwsh 词法分析 → 读写目标
 //
-// 判定链（spec §4.2）：
+// 两种闸门形态（staticGate）：
+//   * staticGate=true（默认；桌面端/执行层还没有多根拦截时）：逐调用静态判定读写目标，见 ①-⑦；
+//   * staticGate=false（2026-10-24 方案 C：执行层多根拦截）：写判定交给内核沙箱与文件 fence，
+//     本插件只保留执行层拦不住的能力 —— 黑名单读、工作区内黑名单写、判不出命令的黑名单文本粗检，
+//     以及审批学习与白名单升权静默放行（statically 放行不再等于执行层放行）。
+//
+// staticGate=true 的判定链（spec §4.2）：
 //   ① enabled=false / 服务缺失 / 无 agent ⇒ pass（透传，不介入）
 //   ② 模式未激活（预设身份不是 activationPreset，且父链上也找不到）⇒ pass
 //   ③ 工具分派：pass ⇒ pass；read/write ⇒ 逐目标判定；shell ⇒ 先静态分析
@@ -13,7 +19,7 @@
 //   ⑤ unanalyzable ⇒ 先黑名单文本粗检（opaqueBlacklistScan），再按 unanalyzable 策略：
 //      pass（v2 默认，交给沙箱运行时拦写）/ ask / deny
 //   ⑥ 审批通道检查：子代理 / 会话 approval 为 never ⇒ 就地把 ask 改写成 deny
-//   （⑦ 与下游合成、⑧ failMode 兜底在 apply() 里做，见 Task 8）
+//   （⑦ 与下游合成、⑧ failMode 兜底在 apply() 里做）
 
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -71,6 +77,9 @@ export function normalizeConfig(raw) {
   if (c.failMode !== undefined && !FAIL_MODES.has(c.failMode)) {
     throw new Error(`dsh-path-rules: failMode must be "closed" or "open", got ${JSON.stringify(c.failMode)}`)
   }
+  if (c.staticGate !== undefined && typeof c.staticGate !== 'boolean') {
+    throw new Error(`dsh-path-rules: staticGate must be a boolean, got ${JSON.stringify(c.staticGate)}`)
+  }
   if (c.autoWhitelistFile !== undefined && (typeof c.autoWhitelistFile !== 'string' || c.autoWhitelistFile.trim().length === 0)) {
     throw new Error('dsh-path-rules: autoWhitelistFile must be a non-empty string')
   }
@@ -90,7 +99,8 @@ export function normalizeConfig(raw) {
     modelFallback: c.modelFallback === true,
     autoWhitelist: c.autoWhitelist === true,
     autoWhitelistFile: typeof c.autoWhitelistFile === 'string' ? c.autoWhitelistFile.trim() : '',
-    preemptiveWhitelistEscalation: c.preemptiveWhitelistEscalation !== false,
+    /** true = 逐调用静态判定写目标；false = 写交给执行层（内核沙箱 / fs fence），只保留黑名单与审批学习。 */
+    staticGate: c.staticGate !== false,
     opaqueBlacklistScan: c.opaqueBlacklistScan !== false,
     logPath: typeof c.logPath === 'string' && c.logPath.trim().length > 0 ? c.logPath.trim() : DEFAULT_LOG,
   }
@@ -321,6 +331,10 @@ export function decideCall(exec, config, services) {
   if (effect.kind === 'pass') return pass()
   const roots = buildRoots(session, config, svc)
 
+  // staticGate=false：执行层拦截模式（方案 C）。写目标不再由本插件判定，只保留执行层
+  // 无法覆盖的黑名单约束与判不出命令的文本粗检。
+  if (!config.staticGate) return decideBlacklistOnly(effect, session, roots, config, svc, sessionCwd)
+
   let decisions = []
   let unanalyzable = null
   if (effect.kind === 'read' || effect.kind === 'write') {
@@ -356,6 +370,19 @@ export function decideCall(exec, config, services) {
     }
   }
 
+  return finalizeDecision(decision, session, svc)
+}
+
+/**
+ * 判定的收尾：无审批通道时把 ask 就地改写成 deny（子代理里没有弹框可弹），
+ * 其余结论补上审批框展示理由。
+ *
+ * @param decision - 判定结果（ask / deny / allow / pass）。
+ * @param session - 调用所属会话。
+ * @param svc - 服务适配层。
+ * @returns 可直接返回给 pre-execute 的 Decision。
+ */
+function finalizeDecision(decision, session, svc) {
   if (decision.kind === 'ask' && hasNoApprovalChannel(session, svc)) {
     return {
       kind: 'deny',
@@ -369,6 +396,50 @@ export function decideCall(exec, config, services) {
     reason: decision.reason,
     displayReason: `路径规则：${decision.reason ?? '需要审批'}`,
   }
+}
+
+/**
+ * staticGate=false 的判定：写操作交给执行层（沙箱内核根 / fs fence）拦截与审批，
+ * 本插件只拦执行层拦不住的目标：
+ *   1. 黑名单「读」—— 沙箱从不限制读，这是唯一防线；
+ *   2. 沙箱可写根内的黑名单「写」—— 根内写不会触发执行层审批，只有本插件能拦；
+ *   3. 判不出命令的黑名单文本粗检（opaqueBlacklistScan）与 unanalyzable 兜底策略。
+ *
+ * 工作区外的黑名单写不提前 ask：执行层会先拒绝并引导带 sandbox_permissions 重试，
+ * 插件提前问会造成「批准了也写不进去」的二次审批（spec 非显性约束 S）。
+ *
+ * @param effect - classifyTool 的结果（read / write / shell）。
+ * @param session - 调用所属会话。
+ * @param roots - buildRoots 的根集合。
+ * @param config - normalizeConfig 的结果。
+ * @param svc - 服务适配层。
+ * @param sessionCwd - 会话工作目录。
+ * @returns Decision（无命中黑名单时 pass）。
+ */
+function decideBlacklistOnly(effect, session, roots, config, svc, sessionCwd) {
+  const hits = []
+  const checkTarget = (target, effectKind) => {
+    if (classifyPath(target, roots) !== 'blacklist') return
+    if (effectKind === 'write' && !insideWritableRoots(target, roots)) return
+    hits.push({ code: 'BLACKLIST', reason: `目标命中黑名单：${target}` })
+  }
+
+  if (effect.kind === 'read' || effect.kind === 'write') {
+    const targets = effect.targets.length > 0 ? effect.targets : [sessionCwd]
+    for (const target of targets) checkTarget(normalizePath(target, sessionCwd), effect.kind)
+  } else {
+    const cwd = effect.workdir.length > 0 ? effect.workdir : sessionCwd
+    const analysis = analyzeCommand(effect.command, { shell: effect.shell, cwd })
+    if (analysis.unanalyzable !== null) {
+      const decision = decideUnanalyzable(effect, analysis.unanalyzable, config)
+      return decision.kind === 'pass' ? pass() : finalizeDecision(decision, session, svc)
+    }
+    for (const target of analysis.reads) checkTarget(normalizePath(target, cwd), 'read')
+    for (const target of analysis.writes) checkTarget(normalizePath(target, cwd), 'write')
+  }
+
+  if (hits.length === 0) return pass()
+  return finalizeDecision({ kind: 'ask', code: hits[0].code, reason: hits[0].reason }, session, svc)
 }
 
 // ─────────────────────────── Cordis 接线 ───────────────────────────
@@ -435,8 +506,14 @@ function renderRules(config, session, services, extras = {}) {
     lines.push(`自动白名单（用户批准后自动学习，升权请求会被自动放行、不弹框）：${autoEntries.map((entry) => entry.path).join(', ')}`)
   }
   if (config.blacklist.length > 0) lines.push(`黑名单（读写都需要审批）：${config.blacklist.join(', ')}`)
-  lines.push('bash/pwsh：只读命令直接放行；写命令目标可静态判定时按项目内/白名单/黑名单判定；判不出的命令交给沙箱按「工作区内修改」档在运行时拦截写入（不再直接拒绝）。')
-  lines.push('白名单目录的写入（能静态判定写目标时）会自动升权、一次成功；其它工作区外写入若被沙箱拒绝：用 sandbox_permissions（能覆盖该目标的最窄更宽模式）+ justification 重试同一调用，用户审批后即可写入。')
+  if (config.staticGate) {
+    lines.push('bash/pwsh：只读命令直接放行；写命令目标可静态判定时按项目内/白名单/黑名单判定；判不出的命令交给沙箱按「工作区内修改」档在运行时拦截写入（不再直接拒绝）。')
+    lines.push('工作区外写入（含 write/edit）若被执行层拒绝：用 sandbox_permissions（能覆盖该目标的最窄更宽模式）+ justification 重试同一调用；命中白名单的升权请求由本插件自动放行（不弹框）。')
+  } else {
+    lines.push('写入由执行层强制：工作区 / 白名单 / 自动白名单 / 临时区以外的写入会被沙箱或文件 fence 拒绝（write/edit 同样），本插件不再做静态写判定。')
+    lines.push('被拒后按错误提示用 sandbox_permissions（能覆盖该目标的最窄更宽模式）+ justification 重试同一调用；用户批准后该目录会被记入白名单，之后同目录写入不再弹框。')
+    lines.push('读操作只有本插件的黑名单会拦（沙箱不拦读）。')
+  }
   return lines.join('\n')
 }
 
@@ -479,58 +556,6 @@ function compose(downstream, decision, config, log, exec) {
 }
 
 /**
- * 白名单写入的预置升权（v2 D13，2026-10-18 方案 B）。
- *
- * 背景：白名单目录位于沙箱可写根（会话工作区 + 临时区）之外，即便插件判定 allow，沙箱仍会先拒绝一次，
- * 模型必须带 sandbox_permissions 重试、再由本插件自动放行 —— 多一次失败往返。
- *
- * 做法：对**静态可判定**且写目标全部合法（白名单/项目内/临时区）、至少一个命中白名单、且至少一个在沙箱
- * 可写根之外的 bash/pwsh 调用，在 pre-execute 里给该次调用预置
- * `sandbox_permissions: danger-full-access` + justification；随后 bash/pwsh 工具发起升权审批，
- * 本插件的 approval/request 监听器按白名单自动 `allowed-once`（不弹框），实现"一次成功"。
- *
- * 安全边界：该调用最终执行的策略与"模型被拒后重试成功"完全相同（同样 danger-full-access、同样由
- * commandEscalationIsWhitelisted 的静态判据放行），不新增放权面；静态分析漏判的风险与既有自动放行同级。
- * 任何失败（参数不可写/校验异常）都只记日志、退回沙箱首拒链路，不改变判定结果。
- *
- * @returns 是否注入了升权参数。
- */
-function preemptWhitelistEscalation(exec, config, services, log) {
-  if (!config.preemptiveWhitelistEscalation || config.dryRun) return false
-  const effect = classifyTool(exec.name, exec.arguments)
-  if (effect.kind !== 'shell') return false
-  const args = exec.arguments
-  if (args === null || typeof args !== 'object') return false
-  // 模型自己带了升权参数（被拒后的重试）时尊重原请求，不覆盖
-  if (args.sandbox_permissions !== undefined || args.justification !== undefined) return false
-  const session = sessionOf(exec)
-  if (session === undefined || session === null) return false
-  const cwd = effect.workdir.length > 0 ? effect.workdir : sessionCwdOf(session, services)
-  const analysis = analyzeCommand(effect.command, { shell: effect.shell, cwd })
-  if (analysis.unanalyzable !== null || analysis.writes.length === 0) return false
-  const roots = buildRoots(session, config, services)
-  let sawWhitelist = false
-  let needsEscalation = false
-  for (const write of analysis.writes) {
-    const target = normalizePath(write, cwd)
-    const kind = classifyPath(target, roots)
-    // 黑名单/项目外写不预置：交给既有判定链（ask / 沙箱审批），避免绕过用户决策
-    if (kind === 'blacklist' || kind === 'outside') return false
-    if (kind === 'whitelist') sawWhitelist = true
-    if (!insideWritableRoots(target, roots)) needsEscalation = true
-  }
-  if (!sawWhitelist || !needsEscalation) return false
-  try {
-    args.sandbox_permissions = 'danger-full-access'
-    args.justification = `路径规则：白名单目录写入自动升权（${analysis.writes.slice(0, 3).join(', ')}）`
-  } catch {
-    return false
-  }
-  log('allow', 'preempt-escalation', describeCall(exec))
-  return true
-}
-
-/**
  * 插件入口：注册 pre-execute 钩子与规则说明注入。
  *
  * 所需服务一律用 ctx.get 取，缺失时按"未激活"退化 —— 不因缺服务让插件加载失败，
@@ -545,7 +570,11 @@ export function apply(ctx, rawConfig) {
     blacklist: normalizeRoots(base.blacklist, process.cwd()),
   }
   const log = (event, summary, detail) => logLine(config.logPath, event, summary, detail)
-  log('plugin-loaded', `enabled=${config.enabled} autoWhitelist=${config.autoWhitelist}`, `activationPreset=${config.activationPreset} dryRun=${config.dryRun}`)
+  log(
+    'plugin-loaded',
+    `enabled=${config.enabled} autoWhitelist=${config.autoWhitelist} staticGate=${config.staticGate}`,
+    `activationPreset=${config.activationPreset} dryRun=${config.dryRun}`,
+  )
   if (config.modelFallback) {
     log('error', 'warn:model-fallback-ignored', 'modelFallback 本期不改变判定行为（模型裁决路径需另立 spec）')
   }
@@ -714,14 +743,6 @@ export function apply(ctx, rawConfig) {
         }
       }
       return downstream
-    }
-    // v2 D13：白名单写的预置升权（只对"插件判定 allow"的调用；注入失败只记日志，退回沙箱首拒链路）
-    if (decision.kind === 'allow') {
-      try {
-        preemptWhitelistEscalation(exec, config, services, log)
-      } catch (error) {
-        log('error', 'preempt-escalation-error', String(error))
-      }
     }
     return compose(downstream, decision, config, log, exec)
   })

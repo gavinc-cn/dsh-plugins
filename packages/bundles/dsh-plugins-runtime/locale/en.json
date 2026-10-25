@@ -1,5 +1,5 @@
 {
   "meta": {
-    "description": "Eight host-side components: memory, git/file/write guards, read-only gate, path-rules gate, session priming, and commit nagging. Each row is a separate switch."
+    "description": "Nine host-side components: memory, git/file/write guards, path-rules gate, multi-root sandbox and filesystem whitelist providers, session priming, commit nagging, and more. Each row is a separate switch."
   }
 }

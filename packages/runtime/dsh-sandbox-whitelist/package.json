@@ -1,0 +1,55 @@
+{
+  "name": "@gavinc-cn/dsh-sandbox-whitelist",
+  "title": "沙箱白名单根",
+  "description": "在官方本地沙箱 provider 之上补「白名单根 = 执行层可写根」：项目根 + 白名单目录 + 临时区可写、其余只读（Linux bwrap/Landlock；Windows 用官方 windows-acl 受限令牌 + 写 SID ACE），让命令级闸门的判定落到执行层。默认停用。",
+  "version": "0.2.0",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./roots": "./lib/roots.mjs",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node --test test/config.test.mjs test/roots.test.mjs test/profiles.test.mjs test/index.test.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "sandbox",
+    "landlock"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh-sandbox": "*",
+    "@deepseek-ai/dsh-sandbox-local": "*",
+    "@deepseek-ai/node-addon-system": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-sandbox": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-sandbox-local": {
+      "optional": true
+    },
+    "@deepseek-ai/node-addon-system": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/runtime/dsh-sandbox-whitelist"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/runtime/dsh-sandbox-whitelist#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues"
+}

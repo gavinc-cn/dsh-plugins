@@ -1,14 +1,14 @@
 # @gavinc-cn/dsh-plugins-runtime —— 「运行时组件」的组合行（2026-10-13 从 @gavinc-cn/dsh-plugins 拆出）。
 #
-# 归属判据（2026-10-15 修订）：**宿主侧的运行支撑组件归本包**（记忆、守卫、只读闸门、沙箱白名单…）。
+# 归属判据（2026-10-15 修订）：**宿主侧的运行支撑组件归本包**（记忆、守卫、沙箱白名单…）。
 # 判据是「面向谁」而不是「代码跑在哪」—— 面向 Web GUI 的组件（含实现落在宿主侧的
 # dsh-patch-ask-expand）都在 @gavinc-cn/dsh-plugins-ui 里。本包组件的 package.json 里都没有
-# `dsh.client` 声明，两个包合起来 = 拆分前 @gavinc-cn/dsh-plugins 的 13 个组件里
-# 仍在 bundle 内的 12 个，行 id 与行顺序都保持不变。
+# `dsh.client` 声明，两个包合起来 = 拆分时（2026-10-13）@gavinc-cn/dsh-plugins 的 13 个组件里
+# 仍在 bundle 内的 12 个，行 id 与行顺序保持不变（当前为 13 行，见本文件各行与演进注释）。
 #
 # 2026-10-15：**dsh-patch-ask-expand 已移到 @gavinc-cn/dsh-plugins-ui**。它没有 `dsh.client`、
 # 运行体确实在宿主侧，但用户视角里它是个纯粹的 GUI 观感功能（提问行默认展开）⇒ 按「面向谁」
-# 归 UI bundle，避免「只想装 UI 包的人发现不了它」。判据全文见 docs/plan-2026-10-15-ask-expand-to-ui-bundle.md。
+# 归 UI bundle，避免「只想装 UI 包的人发现不了它」。判据全文见 doc_ai/plan/202610/20261015_0546_ask-expand-to-ui-bundle.md。
 #
 # 工作方式（与拆分前一致）：
 #   * Plugins 面板出现 @gavinc-cn/dsh-plugins-runtime 卡片，卡片内每个行 = 一个组件 = 一个开关；
@@ -26,9 +26,10 @@
 # 例如 `- id: dsh-superpowers-priming` + `config: { skillPath: ... }`。
 #
 # 依赖：本包在 package.json 的 dependencies 里声明下述 8 个组件包 —— 装本包即把它们一并装上。
-# 发布顺序：**8 个组件包先发，本包最后发**。组件之间也有顺序：@gavinc-cn/dsh-readonly-guard
-# 必须先于本包上 registry；@gavinc-cn/dsh-write-guard 依赖 @gavinc-cn/dsh-path-rules 的 subpath
-# exports，故 path-rules（0.1.3）→ write-guard（0.1.0）→ 本包（dsh-plugins-runtime）依次发。
+# 发布顺序：**8 个组件包先发，本包最后发**。组件之间也有顺序：@gavinc-cn/dsh-write-guard 依赖
+# @gavinc-cn/dsh-path-rules 的 subpath exports，故 path-rules（0.1.3）→ write-guard → 本包
+# （dsh-plugins-runtime）依次发。
+# （2026-10-24 前本包还依赖 @gavinc-cn/dsh-readonly-guard；该组件已退役，见下方退役注释。）
 #
 # 改组件集合 = 改本文件（patch 层 live 热重载，不需要重装/重启）；改完把仓库真源铺到共享活副本
 # （在仓库根执行：bash scripts/deploy-to-dsh.sh dsh-plugins-runtime）。
@@ -61,17 +62,19 @@
 # profile 覆盖行挂回即可，spec §8 回滚 3）；「有包、没进 bundle」由 scripts/check-bundles.mjs 的
 # UNBUNDLED 显式登记。
 
-# dsh-readonly-guard：bash 只读闸门（非只读命令转到 DSH 原生审批）。默认**停用**：
-# 容器 web 侧刻意不挂（与既有 sandbox/approval 分层重叠），宿主 desktop 侧由覆盖行
-# `- id: dsh-readonly-guard` + `disabled: false` 打开（见 desktop 的 cordis.patch.yml）。
-- insert:
-    - id: dsh-readonly-guard
-      disabled: true
-      name: "@gavinc-cn/dsh-readonly-guard"
+# dsh-readonly-guard：2026-10-24 **退役**，行与 dependencies 已移除。
+# 它是 kimi-code `readonly_guard.py` 的移植版 bash 只读闸门（不认预设身份，包内默认停用）；
+# 退役理由：本仓库 6 个档位里已没有它的位置——第 6 档由 dsh-write-guard 按**写入目标**判定、
+# 第 5 档由 dsh-path-rules 判定（都更精准），原生档由沙箱负责；且它判「非只读」时不调用
+# next()，会短路其后注册的闸门（bug 工单 20261024_1305）。2026-10-24 实测两个 profile 均未
+# 启用它、日志 12 次加载 0 次决策 ⇒ 退役对现网零影响。
+# 组件包本体仍留在仓库 packages/runtime/dsh-readonly-guard/ 作回滚真源（回滚 = 把本 insert 行 +
+# dependencies + profile 覆盖行挂回，并从 scripts/check-bundles.mjs 的 UNBUNDLED 删掉登记）；
+# 「有包、没进 bundle」由该脚本的 UNBUNDLED 显式登记。
 
 # dsh-path-rules：第五权限模式「路径规则」的逐调用闸门（项目内可读写 / 项目外写需审批 /
 # 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行）。包内默认无白/黑名单 = 安全空转，
-# 且只在预设身份为 `path-rules` 时介入 ⇒ 不选中该档时对既有四档零影响。
+# 且只在预设身份为 `path-rules` 时介入 ⇒ 不选中该档时对既有五档零影响。
 # 白/黑名单等机器相关配置由各 profile 的覆盖行给。
 - insert:
     - id: dsh-path-rules
@@ -83,3 +86,27 @@
 - insert:
     - id: dsh-write-guard
       name: "@gavinc-cn/dsh-write-guard"
+
+# dsh-sandbox-whitelist：多根沙箱 provider（方案 C）——顶替官方 `- id: sandbox` 行，把
+# 「项目根 + 白名单根 + 临时区」变成执行层可写根，其余只读：Linux 用内核级 bwrap/Landlock，
+# Windows 用官方 windows-acl 受限令牌（给白名单目录补 workspace 写 SID 的 standing ACE）。
+# **默认停用**：启用必须同时把官方 `- id: sandbox` 行停用（同名 service 只能有一个 provider），
+# 否则两个 provider 抢注册（先注册者赢、另一个 fiber 失败）。只对 `enforcePresets` 命中的会话
+# 追加白名单根，其余预设保持官方语义；macOS 未实现 ⇒ apply 期拒绝加载，不要在 macOS profile 打开。
+- insert:
+    - id: dsh-sandbox-whitelist
+      disabled: true
+      name: "@gavinc-cn/dsh-sandbox-whitelist"
+
+# dsh-fs-whitelist：fs provider 替换件（`write`/`edit` 的白名单根）——顶替官方
+# `- id: fs-sandbox`，把「白名单 + 自动白名单」目录接进 fs fence 的可写根。这是 trusted-code
+# 的策略判定、不是内核边界（shell 的内核根见上一行 dsh-sandbox-whitelist）。**默认停用**：
+# 启用必须同时把官方 `- id: fs-sandbox` 行停用（同名 service `fs` 只能有一个 provider），
+# 否则两个 provider 抢注册（先注册者赢、另一个 fiber 失败）。只对 `enforcePresets` 命中的
+# 会话追加白名单根，其余预设保持官方单根语义；跨平台（Windows 走大小写不敏感的词法判定）。
+# 停用必须成对恢复官方 `- id: fs-sandbox`，否则 ctx.fs 缺失会让 read/read_image/write/edit
+# 四个工具一起消失。
+- insert:
+    - id: dsh-fs-whitelist
+      disabled: true
+      name: "@gavinc-cn/dsh-fs-whitelist"

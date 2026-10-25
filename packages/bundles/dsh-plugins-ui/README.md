@@ -25,8 +25,9 @@
 修订缘由：按旧判据它属运行时包，但「只想装 UI 包」的人就永远发现不了它。判据因此从
 「代码跑在哪」改成「面向谁」。其余宿主侧组件（记忆/守卫/沙箱等）仍在
 [@gavinc-cn/dsh-plugins-runtime](../dsh-plugins-runtime/README.md)。
-两个包的行合起来 = **12 个组件**（拆分前 `@gavinc-cn/dsh-plugins` 的 13 个里，`kanban-board`
-已移出 bundle，见下「不随本包下发的组件」）。
+两个包的行合起来 = **13 个组件** = 本包 5 + 运行时 bundle 8（拆分前 `@gavinc-cn/dsh-plugins` 的
+13 个里，`kanban-board` 已移出 bundle、`sandbox-path-allowlist` 已合并退役；之后又新增
+`dsh-path-rules`（2026-10-17）与 `dsh-write-guard`（2026-10-20））。
 
 ## 安装
 
@@ -46,7 +47,7 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-ui
 
 | 行 id | 包 | 做什么 |
 |---|---|---|
-| `dsh-dim-text` | `@gavinc-cn/dsh-dim-text` | 把 Web GUI 文字梯度整体调暗一档（仅深色模式） |
+| `dsh-dim-text` | `@gavinc-cn/dsh-dim-text` | 把 Web GUI 文字梯度整体调暗（仅深色模式）；该行详情页可选 **高/中/低** 三档亮度（原来的效果 = 最高档，2026-10-24 新增） |
 | `dsh-session-unread-persist` | `@gavinc-cn/dsh-session-unread-persist` | 会话列表「已完成未查看」绿点持久化到 localStorage |
 | `dsh-turn-labels` | `@gavinc-cn/dsh-turn-labels` | 右侧轮次刻度轨换成常驻文字（每轮一行显示该轮提问；提问条目直接显示用户回答——蓝色区分、hover 出完整问答，读不到回答时退回原版小横杠） |
 | `dsh-sidebar-width-persist` | `@gavinc-cn/dsh-sidebar-width-persist` | 左侧边栏拖动宽度持久化 |
@@ -59,7 +60,7 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-ui
 
 `@gavinc-cn/kanban-board`（Web GUI 任务看板）**不在本包内**（2026-10-15 从本包移除：行与
 `dependencies` 都删了）。它仍是本仓库 `packages/ui/kanban-board/` 里的组件包（npm 上的
-`0.1.2` 也仍可单独安装），只是不随任何 bundle 下发 ⇒ 装本包**不会**带上它。
+`0.1.3` 也仍可单独安装），只是不随任何 bundle 下发 ⇒ 装本包**不会**带上它。
 
 要在某个 profile 里挂它，就在该 profile 的 `cordis.patch.yml` 里手写一条 insert：
 
@@ -89,7 +90,8 @@ patch 里 insert 的行）；② 同一个行 id 在整棵组合树里只能出�
 ## 已知限制
 
 - 面板里组件的标题/说明来自各组件包自己的 `locale/*.json`；本包的 `locale/*.json` 只提供卡片
-  标题与描述。host 启动时缓存行元数据（`pluginPackages.metaOf`）⇒ 运行中新增/改 `locale` 要重启宿主才看到。
+  标题与描述。`pluginPackages.metaOf()` 每次列举都实时读盘（2026-10-15 实测）⇒ 改 `locale`
+  刷新面板即可，不必重启宿主（旧版「启动时缓存」的说法已证伪）。
 - 卡片描述里的组件数是写死的文案（`locale/*.json`），加组件/减组件时要一起改（本次
   `kanban-board` 移出、`dsh-patch-ask-expand` 移入，文案从「5 个」→「4 个」→「5 个」，注意
   **两次的 5 个不是同一批**：现在是 4 个纯 UI + `dsh-patch-ask-expand`）。

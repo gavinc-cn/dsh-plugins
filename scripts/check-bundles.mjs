@@ -37,15 +37,20 @@ const GROUPS = ['ui', 'runtime', 'bundles']
 // insert 单独挂；但「没被引用」这件事必须是**显式登记**的，不能靠漏写静默通过（否则一行被
 // 误删也查不出来）。清单里的包如果又被某个 bundle 引用了，同样报错（清单过期，该删掉这行）。
 //   kanban-board：2026-10-15 从 @gavinc-cn/dsh-plugins-ui 移除（行 + dependencies），包本体留在
-//                 仓库 packages/ui/kanban-board/，npm 上的 0.1.2 也仍在。
+//                 仓库 packages/ui/kanban-board/，npm 上的 0.1.3 也仍在（2026-10-24 实测 latest）。
 //   sandbox-path-allowlist：2026-10-17 由 @gavinc-cn/dsh-path-rules **合并退役**（行 + dependencies
 //                 移除，白名单能力由新插件的 approval/request 监听等价承接）；包本体留在
 //                 packages/runtime/sandbox-path-allowlist/ 作回滚真源（spec §8 回滚 3）。
-const UNBUNDLED = new Set(['kanban-board', 'sandbox-path-allowlist'])
+//   dsh-readonly-guard：2026-10-24 **退役**（行 + dependencies 移除）。它是 kimi-code
+//                 readonly_guard.py 的移植版 bash 只读闸门，不认预设身份、包内默认停用；bash
+//                 只读判定已被第五档 path-rules、第六档 write-guard（按写入目标判）与原生沙箱覆盖，
+//                 且它判「非只读」时不调 next() 会短路其后闸门。包本体留在
+//                 packages/runtime/dsh-readonly-guard/ 作回滚真源。
+const UNBUNDLED = new Set(['kanban-board', 'sandbox-path-allowlist', 'dsh-readonly-guard'])
 
 // 判据 6 的期望映射：源码树分组 → 该分组的包应归属的 bundle 包名。
 // 为什么要机检：2026-10-15 把 dsh-patch-ask-expand 从 runtime 分组搬到 ui 分组 + 从运行时 bundle
-// 搬到 UI bundle（判据从「代码跑在哪」改成「面向谁」，见 docs/plan-2026-10-15-ask-expand-to-ui-bundle.md）。
+// 搬到 UI bundle（判据从「代码跑在哪」改成「面向谁」，见 doc_ai/plan/202610/20261015_0546_ask-expand-to-ui-bundle.md）。
 // 那种「搬一半」的状态（目录搬了、行没搬，或反过来）此前只能靠人肉核对，现在由本条拦住。
 const GROUP_BUNDLE = {
   ui: '@gavinc-cn/dsh-plugins-ui',
@@ -208,7 +213,7 @@ for (const component of components) {
   if (actual !== expected) {
     fail(
       `packages/${component.group}/${component.dirName}/: 归 ${actual}，但它在 packages/${component.group}/ 分组里` +
-        ` ⇒ 期望归 ${expected}。要么把行搬过去、要么把目录搬过去（判据见 docs/plan-2026-10-15-ask-expand-to-ui-bundle.md）`
+        ` ⇒ 期望归 ${expected}。要么把行搬过去、要么把目录搬过去（判据见 doc_ai/plan/202610/20261015_0546_ask-expand-to-ui-bundle.md）`
     )
   }
 }

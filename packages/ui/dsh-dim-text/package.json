@@ -1,7 +1,7 @@
 {
   "name": "@gavinc-cn/dsh-dim-text",
-  "description": "把 Web GUI 文字梯度整体调暗一档: 经官方扩展点 ctx.theme.overrideTokens 覆盖 --dsw-alias-label-primary/secondary/tertiary, 仅深色模式生效。",
-  "version": "0.1.2",
+  "description": "把 Web GUI 文字梯度整体调暗, 插件页可选 高/中/低 三档亮度 (当前效果 = 最高档): 经官方扩展点 ctx.theme.overrideTokens 覆盖 --dsw-alias-label-primary/secondary/tertiary, 仅深色模式生效。",
+  "version": "0.2.0",
   "type": "module",
   "main": "lib/index.js",
   "files": [
@@ -23,6 +23,9 @@
       "platform": "web",
       "inject": []
     }
+  },
+  "scripts": {
+    "test": "node --test test/brightness.spec.mjs"
   },
   "license": "MIT",
   "repository": {

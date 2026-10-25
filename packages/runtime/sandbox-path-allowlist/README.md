@@ -1,7 +1,13 @@
 # @gavinc-cn/sandbox-path-allowlist
 
 **沙箱路径白名单**：对配置目录内的 `write` / `edit` 沙箱升权请求自动放行，
-在 Web 弹框 answerer 之前短路 `approval/request` 瀑布——用户不再收到弹框。
+在 Web 弹框 answerer 之前短路 `approval/request` 瀑布——设计意图是用户不再收到弹框。
+
+> **2026-10-24 复核（退役包存档说明）**：实现按 `callId` 回查 `session.events` 找写目标
+> （`lib/index.mjs` 的 `escalationTarget()`），而真实审批请求的 session 可能不暴露 `events`
+> ⇒ 该监听器会抛 `TypeError`（被审批瀑布吞成 unavailable）⇒ **自动放行在真机上可能从未生效**。
+> 本包已于 2026-10-17 并入 `dsh-path-rules` 退役、不随任何 bundle 下发；此说明仅为将来复用/回滚前的提醒，
+> 详见 `doc_ai/bug_report/20261024_1350_sandbox-path-allowlist-events-null/`。
 
 ## 作用
 

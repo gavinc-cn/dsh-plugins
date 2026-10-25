@@ -1,8 +1,8 @@
 # @gavinc-cn/dsh-path-rules
 
 DSH 第五权限模式「路径规则」的逐调用闸门：挂在 `tools/pre-execute` waterfall 上，
-先 `await next()` 取下游守卫（`dsh-git-guard` / `dsh-readonly-guard` 等）的结论，
-再按「更严者胜」叠加自己的判定 —— 只可能更严，永不弱化既有守卫。
+先 `await next()` 取下游守卫（如 `dsh-git-guard`）的结论，再按「更严者胜」叠加自己的判定
+—— 只可能更严，永不弱化既有守卫。（原先举例里的 `dsh-readonly-guard` 已于 2026-10-24 退役。）
 
 规则（用户 2026-10-13 定义）：
 
@@ -12,8 +12,9 @@ DSH 第五权限模式「路径规则」的逐调用闸门：挂在 `tools/pre-e
 - **黑名单**内的目录读写**都要审批**（优先级最高，压过白名单与项目内）；
 - `bash` / `pwsh`：只读命令直接放行；写入目标可静态解析时按上述规则判定；**解析不出的命令默认交给沙箱**
   （workspace-write 的运行时写拦截，与「工作区内修改」档一致），可用 `unanalyzable: deny|ask` 改回严格；
-- **白名单写入预置升权**（`preemptiveWhitelistEscalation`，默认开）：静态可判定的白名单写一次成功、不弹框
-  （预置 danger-full-access + 插件自动 `allowed-once`，见下文）；
+- **闸门形态**（`staticGate`，2026-10-24 v3 新增，默认 `true`）：`true` = 逐调用静态判定（本 README
+  主体）；`false` = **执行层拦截模式**——写判定交给沙箱内核根 / 文件 fence（`dsh-sandbox-whitelist` +
+  `dsh-fs-whitelist`），本插件只保留黑名单读、工作区内黑名单写、判不出命令的文本粗检与审批学习；
 - **自动白名单**（可选，`autoWhitelist: true`）：用户在审批框里批准的沙箱升权写入目标，
   其目录会自动进入白名单（持久化），下次同目录的写入不再弹框。见下文。
 
@@ -21,7 +22,7 @@ DSH 第五权限模式「路径规则」的逐调用闸门：挂在 `tools/pre-e
 
 插件**只在预设身份为 `path-rules` 时介入**（`permissionPresets.current(session)`）：
 
-- 其它四档（`read-only` / `workspace-write` / `danger-full-access` / `auto`）行为一字不变；
+- 其它五档（`read-only` / `workspace-write` / `danger-full-access` / `auto` / `write-guard`）行为一字不变；
 - 子代理（`session.header.origin === 'subagent'`）沿 `parentSession` 上溯取祖先身份
   （框架不向子代理继承非 `auto`/`danger-full-access` 的预设身份）；
 - 插件未加载 / `enabled: false` / 服务缺失 / 无 agent 的调用：一律透传，最坏退化成现状
@@ -29,12 +30,26 @@ DSH 第五权限模式「路径规则」的逐调用闸门：挂在 `tools/pre-e
 
 ## 判定链（先命中者胜）
 
+`staticGate: true`（默认）：
+
 ```
 黑名单命中 → ask        白名单命中 → allow       项目内 → allow
 临时区（/tmp、os.tmpdir()）→ allow                项目外读 → allow
-项目外写 → ask（工作区外写交给沙箱升权）
+项目外写 → delegate（交沙箱升权审批，见 `lib/index.mjs` 的 `delegate` 分支）
 shell 判不出 → 黑名单文本粗检（命中 ⇒ ask）→ 否则按 `unanalyzable` 策略（默认 pass，交给沙箱）
 ```
+
+`staticGate: false`（2026-10-24 方案 C：执行层多根拦截，见 [sandbox-whitelist spec](../../../doc_ai/spec/permissions/sandbox-whitelist.md)）：
+
+```
+黑名单读 → ask                     工作区内黑名单写 → ask
+其余一切 → pass（写交给沙箱内核根 / fs fence：越界拒绝 → 模型带 sandbox_permissions 重试 → 用户审批）
+shell 判不出 → 黑名单文本粗检（命中 ⇒ ask）→ 否则按 unanalyzable 策略
+                                      审批监听：命中白名单 ⇒ allowed-once（不弹框）+ 学进自动白名单
+```
+
+`staticGate: false` 时**静态放行不再代表执行层放行**：插件返回 `pass` 只是"不拦"，真正能否写入由
+`dsh-sandbox-whitelist`（shell 内核根）和 `dsh-fs-whitelist`（`write`/`edit` 的 fs fence）决定。
 
 `ask` 走框架标准审批流程（`ctx.approval.request`）；会话审批通道为 `never`（子代理被框架钉成
 `never`）时，插件在判定阶段就把 `ask` 改写成 `deny` 并提示回主会话执行 —— 那些会话里没有弹框
@@ -54,9 +69,9 @@ shell 判不出 → 黑名单文本粗检（命中 ⇒ ask）→ 否则按 `unan
     unanalyzable: pass            # deny | ask | pass：shell 判不出时的兜底（pass=交给沙箱，v2 默认）
     failMode: closed              # closed | open：插件内部异常时的兜底
     dryRun: false                 # true = 只记日志不拦（灰度用）
-    modelFallback: false          # 预留字段：置 true 仅记一条 warn 日志，判定行为不变
+    modelFallback: false          # 预留字段：置 true 时模型判定回退只记一条 error 事件（summary `warn:model-fallback-ignored`），判定行为不变
     autoWhitelist: false          # true = 用户批准的沙箱升权写入目标自动进白名单（默认关闭）
-    preemptiveWhitelistEscalation: true  # 白名单写预置升权：一次成功、不弹框（v2 默认开）
+    staticGate: true              # true=逐调用静态判定；false=写交给执行层（沙箱内核/文件 fence），本插件只留黑名单与审批学习
     opaqueBlacklistScan: true     # 判不出命令的黑名单文本粗检（黑名单读的唯一兜底，v2 默认开）
     autoWhitelistFile: <dsh home>/path-rules/auto-whitelist.json   # 自动白名单状态文件（可选）
     logPath: ~/.kimi-code/hooks/logs/path_rules.dsh.log
@@ -75,7 +90,7 @@ auto-whitelist-save / auto-whitelist-error`。
 **触发条件**（缺一不可）：
 
 1. `autoWhitelist: true` 且 `enabled: true`、`dryRun: false`；
-2. 会话当前处于「路径规则」档（`activationPreset` 命中，子代理沿父链上溯；其它四档不学习）；
+2. 会话当前处于「路径规则」档（`activationPreset` 命中，子代理沿父链上溯；其它五档不学习）；
 3. 审批类型是**沙箱升权**（`reason` 以 `escalate sandbox to ` 开头）；
 4. 用户在审批框点了同意（`approval/request` 瀑布下游返回 `allowed-once`；拒绝/取消/不可用都不学）。
 
@@ -85,7 +100,11 @@ auto-whitelist-save / auto-whitelist-error`。
 
 **生效方式**：条目并入内存白名单（下一条消息起系统提示里可见），此后：
 
-- 该目录的写入由本插件直接 `allow`（但**沙箱仍会先拒绝首次写入** —— 跨层限制见下）；
+- 该目录的写入不再触发本插件的静态判定；执行层是否放行取决于根集合：
+  - `staticGate: false` + 多根 provider/fence 已启用：该目录已是执行层可写根 ⇒ 直接成功（bash 走内核根，
+    `write`/`edit` 走 fs fence）；
+  - 尚未成为执行层可写根（如 `<dsh home>` 这类刻意排除的目录，或桌面端还没启用多根件）：仍走
+    「执行层首拒 → 模型带 `sandbox_permissions` 重试」；
 - 模型按提示带 `sandbox_permissions` 重试时，`approval/request` 命中白名单 ⇒ 插件答 `allowed-once`，
   用户**不再看到弹框**。
 
@@ -126,24 +145,10 @@ auto-whitelist-save / auto-whitelist-error`。
 即：批准一个文件**不会**被放大成整个 home/系统目录的长期信任；`/root/data` 这类更深层目录可以自动加入，
 但 `/root` 本身不行（要用就手工写进 config 的 `whitelist`）。
 
-**跨层限制（重要）**：自动白名单**不突破沙箱**。工作区外第一次写入仍会被 `workspace-write` 拒绝一次，
-模型需按错误提示带 `sandbox_permissions` + `justification` 重试；区别只在于重试的审批请求
-由插件自动放行、不再弹框。详见下文「已知盲区 8」。
-
-## 白名单写入的预置升权（`preemptiveWhitelistEscalation`，2026-10-18 v2）
-
-**用途**：白名单目录在沙箱可写根（会话工作区 + 临时区）之外，静态判定放行后沙箱仍会先拒绝一次，
-模型需带 `sandbox_permissions` 重试、插件再自动放行。预置升权把这一步提前，让白名单写**一次成功**。
-
-**条件（全部满足）**：开启且非 `dryRun`；工具是 `bash`/`pwsh`；静态分析判得出写目标且非空；每个写目标
-∈ 白名单/项目内/临时区；至少一个命中白名单；至少一个在沙箱可写根之外；调用参数里没有
-`sandbox_permissions`/`justification`（尊重模型自己的升权请求）。
-
-**机制**：pre-execute 里给该次调用预置 `sandbox_permissions: danger-full-access` + justification；
-bash/pwsh 工具随后发起升权审批，插件自己的 `approval/request` 监听器按白名单自动答 `allowed-once`
-（不弹框）。执行策略与"模型重试后自动放行"完全相同，不新增放权面；注入失败（参数不可写等）只记
-`preempt-escalation-error` 日志并退回原链路。方案 C（自研 sandbox provider 让白名单成为运行时 RW 根）
-落地后应关闭本项（`preemptiveWhitelistEscalation: false`），否则会绕过 C 的运行时拦截。
+**跨层限制（重要）**：自动白名单**不突破执行层**。它只是把目录写进状态文件，真正放行的是
+`dsh-sandbox-whitelist`（逐次 confine 读取）与 `dsh-fs-whitelist`（逐次写路径读取）；桌面端或未启用
+多根件时，`write`/`edit` 仍会先被执行层拒绝一次，模型需按错误提示带 `sandbox_permissions` +
+`justification` 重试，重试的审批请求再由插件自动放行。详见「已知盲区 8」。
 
 ## 已知盲区（未覆盖，别当安全）
 
@@ -156,10 +161,11 @@ bash/pwsh 工具随后发起升权审批，插件自己的 `approval/request` �
 6. **读操作不受沙箱保护**：黑名单读的防护 100% 依赖本插件处于激活状态。
 7. **大小写敏感按平台**：Linux 下按大小写敏感匹配；Windows 桌面端目前**未**实现大小写不敏感回退
    （目录大小写不同但实际相同的路径可能漏判黑名单，已知未覆盖）。
-8. **跨层分工**：插件批准**不能**突破 `workspace-write` 沙箱（可写根 = 会话工作区 + `/tmp` + `os.tmpdir()`）。
-   项目外/白名单（工作区外）的写会被沙箱拦下，模型需带 `sandbox_permissions` + `justification`
-   重试同一调用以触发框架审批；白名单目标的升权请求由本插件自动答 `allowed-once`（无弹框）。
-   详见 spec §4.4。
+8. **跨层分工**：插件批准**不能**突破执行层。`staticGate: false` 时写判定完全交给执行层：
+   shell 由 `dsh-sandbox-whitelist` 的内核根（工作区 + `/tmp` + 白名单 + 自动白名单）拦，
+   `write`/`edit` 由 `dsh-fs-whitelist` 的 fs fence 拦；越界写先被拒、模型带 `sandbox_permissions` +
+   `justification` 重试，重试的审批请求由本插件按白名单自动答 `allowed-once`（无弹框）并学习目录。
+   `staticGate: true` 时静态判定只决定"是否提前问"，执行层仍是最终边界。详见 spec §4.4。
 9. **自动白名单只学"能静态解析写目标"的调用**：MCP/未知工具、`unanalyzable` 的 shell、参数未被记忆的
    调用都不学习（只记 skip 日志）；`bash` 的间接产物（脚本内部、后台进程）同既有盲区。
 10. **自动白名单是父目录粒度**：批准 `/a/b/f.txt` 会把整个 `/a/b` 加入白名单（用户语义如此）；
@@ -170,9 +176,10 @@ bash/pwsh 工具随后发起升权审批，插件自己的 `approval/request` �
     （`opaqueBlacklistScan`）；脚本内部/间接读取（如脚本文件里读黑名单路径）不可见。
 13. **判不出命令的白名单「写」**：无法预判写目标 ⇒ 仍走"沙箱首拒 → 升权重试"；且升权审批因解析不出目标
     会弹用户框、`autoWhitelist` 也学不到（`writableDirsOf` 对 unanalyzable 返回空）。
-14. **预置升权（`preemptiveWhitelistEscalation`）使该次调用失去沙箱写兜底**：与既有"模型重试后插件自动
-    放行"属同一信任级别（最终都是 danger-full-access），但仍依赖静态分析正确；可用
-    `preemptiveWhitelistEscalation: false` 关闭，退回"首拒 + 重试"链路。
+14. **`staticGate: false` 依赖执行层多根件就位**：若只关静态判定、却没启用 `dsh-sandbox-whitelist` /
+    `dsh-fs-whitelist`，白名单目录的写会退化成"每次拒绝 → 重试 → 弹窗"（桌面端当前就是这条链路：
+    它保留 `staticGate: true`）。另外该模式下项目外写入固定多一次失败往返（执行层拒绝 → 重试），
+    这是把判定交给执行层的固有代价。
 
 ## 测试
 
@@ -185,6 +192,9 @@ node --test test/rules.test.mjs test/classify.test.mjs test/analyze-lex.test.mjs
 
 （Node v24 下 `node --test test/` 目录形式会失败，必须显式给出文件；`npm test` 已包含全部 9 个文件。）
 
-v2 设计（路径规则 = workspace-write 超集，2026-10-18）：`docs/superpowers/specs/2026-10-18-path-rules-v2-superset-design.md`；
-设计文档（v1）：`docs/superpowers/specs/2026-10-16-dsh-path-rules-permission-mode-design.md`；
-实现计划：`docs/superpowers/plans/2026-10-17-dsh-path-rules-permission-mode.md`。
+v3（2026-10-24，`staticGate` 与预置升权退役、配合方案 C 完整版）：见
+[permission-gates spec](../../../doc_ai/spec/permissions/permission-gates.md) 与 plan
+`doc_ai/plan/202610/20261024_1920_path-rules-static-gate-off.md`；
+v2 设计（路径规则 = workspace-write 超集，2026-10-18）：`doc_ai/plan/202610/20261018_1955_path-rules-v2-superset-design.md`；
+设计文档（v1）：`doc_ai/plan/202610/20261016_1256_dsh-path-rules-permission-mode-design.md`；
+实现计划：`doc_ai/plan/202610/20261017_0509_dsh-path-rules-permission-mode.md`。

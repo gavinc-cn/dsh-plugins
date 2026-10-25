@@ -6,8 +6,8 @@
  * hover 出预览卡(提问 + 回答预览), 点击跳到该轮。
  *
  * 关键约束与做法:
- *  1. 模块注册 id 必须等于解析出的包名, 见 doc_ai/plan/202610/20261001_2255_自研插件收进scope后
- *     的迁移验证与client-id修复.md: 写成短名会让 boot 清单行与 bundle 对不上, 页面直接报
+ *  1. 模块注册 id 必须等于解析出的包名（契约见 doc_ai/spec/ui/pure-browser-plugins.md
+ *     的「浏览器半边契约」）: 写成短名会让 boot 清单行与 bundle 对不上, 页面直接报
  *     "loaded without registering"。所以这里是 "@gavinc-cn/dsh-turn-labels"。
  *  2. 数据取自宿主已有的 turnOutline 投影 (dsh-session-turn-outline, web 组合里已挂载):
  *     每轮 {turn, seq, prompt(<=50字), response(<=120字)}。客户端经 ctx.uiSession.current
@@ -28,8 +28,9 @@
  *  7. 小横杠的"跳到该轮 + 展开提问行"里, 展开是靠点 dsh 自己的折叠表头完成的, 而 dsh 的
  *     祖先链出了聊天区就是别的区域(聊天列的上一个兄弟是侧栏, 里面第一个按钮是"新建会话")。
  *     所以候选表头必须**限定在同一个会话滚动区内**、只认紧邻的上一个兄弟、且不点已展开的表头 ——
- *     详见 findRevealHeaders / isRevealable 的注释与
- *     doc_ai/plan/202610/20261003_1810_DSH小横杠偶发跳出新会话根因与修复.md。
+ *     详见 findRevealHeaders / isRevealable 的注释；根因分析源自原开发仓 plan
+ *     `20261003_1810_DSH小横杠偶发跳出新会话根因与修复.md`（未随迁，结论已并入
+ *     doc_ai/spec/ui/pure-browser-plugins.md）。
  *  8. **列宽必须跟着正文栏宽度走, 不能有下限**(0.5.0)。正文宽度由会话区两侧沟槽的拖拽条实时改
  *     (`--dsh-chat-user-width`), 拖宽后"正文栏右缘 -> 轨道右缘"只剩几十像素; 旧实现有
  *     MIN_COLUMN_PX=120 的硬下限, 把列强撑到 120px 压住正文(实测重叠 45px+)。现在:
@@ -38,11 +39,14 @@
  *     ResizeObserver, 拖动正文时不靠 400ms 轮询也能当拍跟上。同时修掉 0.4.0 等价几何里
  *     `contentRight - flowRight` 漏减 frame 的 12px(`right:12px`)导致**恒定压住正文一条**
  *     的老 bug(真机实测 overlap 12~13px, 与正文宽度无关)。
- *     详见 doc_ai/plan/202610/20261006_0925_DSH右侧列表宽度不随正文自适应根因与修复.md。
+ *     根因分析源自原开发仓 plan
+ *     `20261006_0925_DSH右侧列表宽度不随正文自适应根因与修复.md`（未随迁，结论已并入
+ *     doc_ai/spec/ui/pure-browser-plugins.md）。
  *  9. **提问条目改为显示用户回答**(0.6.0)。原版每个 ask_user_question 只给一条 20x2px 小横杠;
  *     现在只要能读到回答, 就把该条目画成**回答文字行**(品牌蓝 accent, 与用户提问行的墨色区分),
  *     一次提问含多个问题就一行一个回答; 读不到回答(未作答/整题跳过/用户手动折叠了那一行)时
- *     退回原版小横杠。回答的取值口径(2026-10-15 真机取证, 见 doc plan):
+ *     退回原版小横杠。回答的取值口径(2026-10-15 真机取证, 见
+ *     doc_ai/plan/202610/20261015_1933_turn-labels-answers.md):
  *       [data-tool="ask_user_question"] > div.bodyWrap > dl.fsXYAq_card
  *         > div.fsXYAq_item > dt.fsXYAq_question + dd.fsXYAq_answer > span.fsXYAq_answerLine
  *     两个必须记住的点: ① 必须用 `textContent` 读 dd —— 提问行常处在被折叠的「轮次过程」组里
@@ -50,7 +54,7 @@
  *     ② 「已跳过」占位(span 类名以 _skipped 结尾)不是回答, 要跳过它。
  *     不走 userQuestions 投影: 它只跟踪带 timeout 的定时 schema, 本机是阻塞式 schema,
  *     全库投影的 settled 都是空的。
- *     详见 docs/plan-2026-10-15-turn-labels-answers.md。
+ *     详见 doc_ai/plan/202610/20261015_1933_turn-labels-answers.md。
  *
  * 卸载: 删 <profile>/cordis.patch.yml 里的 insert 条目(或改 disabled: true)即热卸载。
  * 调试: 控制台 window.__TURN_LABELS__ 可读投影条目、内置轨元素与几何
@@ -524,7 +528,7 @@ window.__ModuleLoader__.load({
 		 *   [data-tool="ask_user_question"] > div.bodyWrap > dl.fsXYAq_card
 		 *     > div.fsXYAq_item > dt.fsXYAq_question + dd.fsXYAq_answer > span.fsXYAq_answerLine
 		 *
-		 * 三个必须注意的点(2026-10-15 真机取证, 见 docs/plan-2026-10-15-turn-labels-answers.md):
+		 * 三个必须注意的点(2026-10-15 真机取证, 见 doc_ai/plan/202610/20261015_1933_turn-labels-answers.md):
 		 *  1. **用 textContent 不用 innerText**。提问行常处在被折叠的「轮次过程」组里(祖先带
 		 *     hidden="until-found"), 此时 innerText 对隐藏子树一律返回空串 —— 实测同一条会话里
 		 *     4/4 行都是空, textContent 才拿得到原文。

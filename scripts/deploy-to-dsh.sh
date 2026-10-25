@@ -10,21 +10,32 @@
 # 免得铺错地方）。
 #
 # 目标目录在 mutagen 白名单 `!.dsh/profiles/node_modules/@gavinc-cn/**` 之内，会双向同步到宿主
-# `<宿主用户目录>/.dsh/profiles/node_modules/@gavinc-cn/<包>` —— 容器 web profile 与宿主 desktop
-# profile 共用同一份，改完 patch 层/代码当场热重载，不需要 pnpm 重装、也不需要重启
+# `<宿主用户目录>/.dsh/profiles/node_modules/@gavinc-cn/<包>` —— 容器 web profile 直接读这份共享
+# 副本，改完 patch 层/代码当场热重载，不需要 pnpm 重装、也不需要重启
 # （例外：profile 的 `dsh.profile.bundles` 是启动时读的，改它要重启宿主）。
+# **注意**：desktop profile 另有本地 registry 副本会遮蔽共享副本，桌面端要加 `--desktop` 才覆盖到（见下）。
+#
+# 双端（2026-10-24 补）：**web profile 直接读共享活副本，但 desktop profile 有自己的本地
+# registry 副本**（`~/.dsh/profiles/desktop/node_modules/@gavinc-cn/*`，由桌面端插件面板/pnpm
+# 装出来的真实目录），按 Node 解析优先级**遮蔽**共享副本 ⇒ 只铺共享副本时桌面端仍是旧代码。
+# 加 `--desktop` 时，同一份仓库内容也铺进桌面 profile 的本地副本（不删除多余文件；--prune 只
+# 作用于共享副本）。桌面端生效方式：客户端半由 client-modules 的 artifact stat-poll 热替换
+# （约 2 秒，无需重启）；改了**宿主侧 node 半代码或行集合**才需要重启桌面端。
+# 长期/发布路径仍是发 npm（桌面端不该长期依赖本地副本被手改，pnpm 重装会按 registry 盖回）。
 #
 # 用法:
-#   scripts/deploy-to-dsh.sh [--dry-run] [--prune] [--quiet] [<包名>...]
+#   scripts/deploy-to-dsh.sh [--desktop] [--dry-run] [--prune] [--quiet] [<包名>...]
 #
+#   --desktop   同时铺到 desktop profile 的本地副本（桌面端也生效；见上）
 #   --dry-run   只报告将发生的变化，不写盘（等价 rsync -n）
 #   --prune     删除「共享副本里有、仓库里没有」的文件（默认只报告不删：共享副本是 dsh 正在
-#               加载的活目录，宁可留多余文件也不要误删运行时要用的东西）
+#               加载的活目录，宁可留多余文件也不要误删运行时要用的东西；不作用于桌面副本）
 #   --quiet     只打印有差异的包
 #   <包名>...   只部署指定包（缺省 = packages/<分组>/<包>/ 下全部）
 #
 # 环境变量:
-#   DSH_SHARED_ROOT  共享活副本的根目录（缺省 $HOME/.dsh/profiles/node_modules/@gavinc-cn）
+#   DSH_SHARED_ROOT     共享活副本的根目录（缺省 $HOME/.dsh/profiles/node_modules/@gavinc-cn）
+#   DSH_DESKTOP_PROFILE 桌面 profile 目录（缺省 $HOME/.dsh/profiles/desktop；--desktop 用）
 #
 # 退出码: 0 = 目标与仓库一致（--prune 时逐字节一致，默认模式下允许共享副本存在多余文件）;
 #         1 = 有包部署失败或校验不通过; 2 = 用法错误。
@@ -36,6 +47,7 @@ DST_ROOT="${DSH_SHARED_ROOT:-$HOME/.dsh/profiles/node_modules/@gavinc-cn}"
 DRY_RUN=0
 PRUNE=0
 QUIET=0
+DEPLOY_DESKTOP=0
 WANTED=()
 
 usage() {
@@ -46,6 +58,7 @@ usage() {
 while [ $# -gt 0 ]; do
   case "$1" in
     -n|--dry-run) DRY_RUN=1 ;;
+    --desktop)    DEPLOY_DESKTOP=1 ;;
     --prune)      PRUNE=1 ;;
     -q|--quiet)   QUIET=1 ;;
     -h|--help)    usage; exit 0 ;;
@@ -104,10 +117,68 @@ RSYNC_OPTS=(-r -l -c --no-times --no-perms --no-owner --no-group --itemize-chang
 echo "仓库:   $REPO"
 echo "目标:   $DST_ROOT"
 echo "模式:   $([ "$DRY_RUN" -eq 1 ] && echo 'dry-run（不写盘）' || echo '写入')$([ "$PRUNE" -eq 1 ] && echo ' + prune（会删除多余文件）' || echo '')"
+
+# 桌面 profile 的本地副本根目录（--desktop 时才需要存在；缺省 = 桌面端插件面板/pnpm 装出来的那份）。
+if [ "$DEPLOY_DESKTOP" -eq 1 ]; then
+  DESKTOP_PROFILE="${DSH_DESKTOP_PROFILE:-$HOME/.dsh/profiles/desktop}"
+  DESKTOP_ROOT="$DESKTOP_PROFILE/node_modules/@gavinc-cn"
+  if [ ! -d "$DESKTOP_ROOT" ]; then
+    echo "错误: --desktop 需要桌面 profile 的 node_modules/@gavinc-cn 存在: $DESKTOP_ROOT" >&2
+    echo "      （桌面端没装过这些包，或用 DSH_DESKTOP_PROFILE 指定了错误目录）" >&2
+    exit 1
+  fi
+  echo "桌面端: $DESKTOP_PROFILE"
+fi
 echo
 
 rc=0
 checked=0
+desk_checked=0
+
+# 桌面端 rsync 参数：与共享副本一致，但**永不带 --delete**（pnpm 管理的目录里可能有本包之外
+# 的东西；宁可留多余文件也不要在桌面端运行时删文件），并**跳过 test/ 与 verify/**（桌面端只需要
+# 运行内容：lib/locale + package.json/README/LICENSE；单测与截图不从容器往 Windows 搬）。
+DESKTOP_RSYNC_OPTS=(-r -l -c --no-times --no-perms --no-owner --no-group --itemize-changes --exclude node_modules/ --exclude .git/ --exclude test/ --exclude verify/)
+[ "$DRY_RUN" -eq 1 ] && DESKTOP_RSYNC_OPTS+=(-n)
+[ "$QUIET"   -eq 1 ] && DESKTOP_RSYNC_OPTS+=(-q)
+
+# 把统计 itemize 输出的 awk 抽出来复用（变化数 = 带标志位/长度>2 的行数）。
+count_changes() {
+  awk '{ s = $1; if (s ~ /^[<>ch]/) n++; else if (length(s) > 2) n++ } END { print n + 0 }'
+}
+
+# 把单个包铺到桌面 profile 的本地副本。三种情况：
+#   - 软链（桌面 profile 已改成跟随共享副本）→ 跳过（共享副本那次已经生效）；
+#   - 真实目录（插件面板/pnpm 装出来的 registry 副本）→ rsync 内容 + 校验；
+#   - 不存在（桌面端没装该包）→ 报告跳过，不算失败。
+deploy_desktop() {
+  local pkg="$1" src="$2" dst="$DESKTOP_ROOT/$1"
+  if [ -L "$dst" ]; then
+    [ "$QUIET" -eq 0 ] && echo "   desktop: 是软链（跟随共享副本），无需单独铺"
+    return 0
+  fi
+  if [ ! -d "$dst" ]; then
+    [ "$QUIET" -eq 0 ] && echo "   desktop: 桌面 profile 未安装 $pkg，跳过"
+    return 0
+  fi
+  local changes mismatch bad
+  changes="$(rsync "${DESKTOP_RSYNC_OPTS[@]}" "$src/" "$dst/" | count_changes)"
+  desk_checked=$((desk_checked + 1))
+  mismatch="$(diff -rq --exclude node_modules --exclude test --exclude verify "$src" "$dst" 2>&1 || true)"
+  # 默认模式容忍桌面副本多出的文件（pnpm 可能留着旧的 .orig/备份之类）；只抓内容不一致。
+  bad="$(printf '%s\n' "$mismatch" | grep -v '^$' | grep -v '^Only in ' || true)"
+  if [ -n "${bad:-}" ] && [ "$DRY_RUN" -ne 1 ]; then
+    echo "   desktop: 校验不通过"
+    printf '%s\n' "$bad" | sed 's/^/     /'
+    rc=1
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    echo "   desktop: $([ "${changes:-0}" -gt 0 ] && echo "待同步（${changes} 项变化）" || echo '无差异')"
+  elif [ "$QUIET" -eq 0 ] || [ "${changes:-0}" -gt 0 ]; then
+    echo "   desktop: $([ "${changes:-0}" -gt 0 ] && echo "已同步（${changes} 项变化）" || echo '无差异')"
+  fi
+  return 0
+}
+
 for pkg in "${PKGS[@]}"; do
   src="${PKG_DIR[$pkg]:-}"
   dst="$DST_ROOT/$pkg"
@@ -118,12 +189,18 @@ for pkg in "${PKGS[@]}"; do
     continue
   fi
 
+  # ── 共享活副本（web profile 直接读；desktop 在本地副本缺失时回退到它）──────────────
   [ -d "$dst" ] || echo "== $pkg: 共享副本里不存在，将新建（rsync 会自动创建目录）"
 
   # 统计「真实变化」：-i 会给每个文件一行，`$1` 是 11 位 itemize 串 —— `.f` / `.d` 表示无变化
   # （长度恰为 2），带任何标志位或 `<`/`>`/`c`/`h` 前缀才算变化。
-  changes="$(rsync "${RSYNC_OPTS[@]}" "$src/" "$dst/" | awk '{ s = $1; if (s ~ /^[<>ch]/) n++; else if (length(s) > 2) n++ } END { print n + 0 }')"
+  changes="$(rsync "${RSYNC_OPTS[@]}" "$src/" "$dst/" | count_changes)"
   checked=$((checked + 1))
+
+  # ── 桌面 profile 的本地副本（--desktop；会遮蔽共享副本，所以两端都要铺）────────────
+  if [ "$DEPLOY_DESKTOP" -eq 1 ]; then
+    deploy_desktop "$pkg" "$src"
+  fi
 
   if [ ! -d "$dst" ]; then
     printf '== %-28s %s\n' "$pkg" "$([ "${changes:-0}" -gt 0 ] && echo "待同步（${changes} 项变化）" || echo '无差异')"
@@ -139,7 +216,7 @@ for pkg in "${PKGS[@]}"; do
     extra="$(printf '%s\n' "$mismatch" | grep '^Only in ' || true)"
   fi
 
-  if [ -n "${bad:-}" ]; then
+  if [ -n "${bad:-}" ] && [ "$DRY_RUN" -ne 1 ]; then
     echo "== $pkg: 校验不通过"
     printf '%s\n' "$bad" | sed 's/^/   /'
     rc=1
@@ -155,6 +232,10 @@ for pkg in "${PKGS[@]}"; do
 done
 
 echo
+if [ "$DEPLOY_DESKTOP" -eq 1 ]; then
+  echo "桌面端: $desk_checked 个包已核对本地副本（$DESKTOP_PROFILE）"
+  echo "提示: 桌面端客户端半由 client-modules 热替换（约 2 秒）；若改了宿主侧 node 代码或行集合，需重启桌面端。"
+fi
 if [ "$rc" -eq 0 ]; then
   echo "OK: $checked 个包已核对$([ "$DRY_RUN" -eq 1 ] && echo '（dry-run，未写盘）' || echo '，目标与仓库一致')"
 else

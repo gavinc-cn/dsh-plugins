@@ -52,7 +52,7 @@ node <pkg>/lib/cli.mjs <子命令> [参数]
 | 子命令 | 参数 | 说明 | 退出码 |
 |---|---|---|---|
 | `note <path>` | `--op`(write) `--tool` `--prev-from -` `--prev <sha1>` `--message` `--force` `--quiet` | 记录「该文件现在的状态 = 本会话期望状态」，并自动存内容副本 | 0 / 2（文件不存在或读不到） |
-| `check` | `--path P` `--quiet` `--json` | 比对 journal 与磁盘 | 0（无漂移/静默）/ 1（有漂移） |
+| `check` | `--path P` `--quiet` `--json` | 比对 journal 与磁盘 | 0（无漂移/静默）/ 1（有漂移）；`--json` 形式恒 0（只输出 JSON 数组） |
 | `report` | `--path P` `--since T` | 时间线 + 当前漂移详情 + 恢复命令 | 0 |
 | `restore <path>` | `--to <sha1\|last>`（必填）`--yes` | 显式恢复；无 `--yes` 一律拒绝 | 0 / 2 |
 | `ack <path>` | `--remove` | 豁免路径（不再告警） | 0 / 2 |
@@ -150,7 +150,7 @@ Python 的 `stop-hook` 在负载带 `session_id` 时**只**看 `<state_root>/<sa
 
 ```bash
 cd <dsh home>/profiles/node_modules/@gavinc-cn/dsh-file-guard
-node --test test/plugin.test.mjs     # 52 个用例：core/CLI 行为 + 插件（假 ctx）
+node --test test/plugin.test.mjs     # 57 个用例：core/CLI 行为 + 插件（假 ctx）
 node --test test/interop.mjs         # 14 个用例：与 Python CLI 双向互操作
 ```
 
@@ -186,10 +186,14 @@ node --test test/interop.mjs         # 14 个用例：与 Python CLI 双向互�
    Unicode 行分隔符上切）。只有当路径/备注里出现这些字符时才有差别，且本包的行为更不易误伤；
    真实数据（JSON 转义后的单行记录）两边完全一致。
 
+**已确证项（2026-10-24 补充）**
+
+- 插件在真实 harness 进程内的装载：当前宿主进程里已实际运行，
+  `~/.kimi-code/hooks/logs/file_guard.dsh.log` 有实时 `plugin-loaded` / `stop:clean` 记录；
+  共享活副本与仓库源码逐字节一致。此前「本次未重启 dsh、装载路径未实测」的结论作废。
+
 **未确证项**
 
-- 插件在真实 harness 进程内被 Cordis 装载的路径未实测（本次不重启 dsh，也没有改
-  `cordis.patch.yml`）；已做的是 `import()` 自检 + 假 ctx 驱动全部监听器逻辑。
 - `agent/turn-stopping` 在子代理会话上是否与主会话同样触发，取决于 harness 实现；
   插件不依赖该假设（真触发了就按同一套逻辑检查，没有记录就静默）。
 - Python 侧 `st_ino` 与本包 `Number(st.ino)` 的极端大 inode（> 2^53）未构造用例，

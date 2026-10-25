@@ -40,7 +40,7 @@
  * 移除方式: 删掉 cordis.patch.yml 里对应的 insert 条目, 删除本目录, 重启 dsh web;
  * 顺手可 `localStorage.removeItem("dsh.layout.sidebarWidth")`。
  *
- * 设计文档: doc_ai/spec/dsh-plugin/dsh-sidebar-width-persist.md
+ * 设计文档: doc_ai/spec/ui/pure-browser-plugins.md
  */
 window.__ModuleLoader__.load({
   // 模块 id 必须等于包名 (@gavinc-cn/dsh-sidebar-width-persist), 理由见 kanban-board 同处注释:

@@ -11,7 +11,7 @@
   会被省略号截断）；点击跳到该提问的位置
   （展开候选限定在同一会话滚动区内，避免误点侧栏按钮）。
   - 读不到回答时（未作答 / 整题被跳过 / 用户把那行提问折叠了）退回原版小横杠。
-  - 回答的取值口径见 `docs/plan-2026-10-15-turn-labels-answers.md`：读
+  - 回答的取值口径见 `doc_ai/plan/202610/20261015_1933_turn-labels-answers.md`：读
     `[data-tool="ask_user_question"]` 行内 `dl dd` 的 `textContent`（不能用 `innerText`，
     提问行常处在 `hidden="until-found"` 的折叠组里）。
 - 列宽跟着正文栏宽度自适应（无下限，文字超宽截断），正文拉宽后不压正文。

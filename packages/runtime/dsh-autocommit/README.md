@@ -25,7 +25,7 @@ DSH 原生的**自动提交守卫**：本会话改过文件、却想接着跑下
 
 | 键 | 默认 | 说明 |
 |---|---|---|
-| `enabled` | `true` | 总开关（`false` 时完全不介入） |
+| `enabled` | `true` | 总开关；`false` 时不挡、不提交，但插件仍注册监听：`session/event` 仍累积触碰路径，`agent/turn-stopping` 在已累积到路径时会先做一次 `git rev-parse` 仓库探测再跳过（关闭检查在仓库定位之后） |
 | `dryRun` | `false` | 只记日志、不挡不提交 |
 | `commitOnApproval` | `false` | 审批弹窗路径上由插件代提交 |
 | `maxBlocks` | `2` | 同一改动窗口内最多挡几次 |
@@ -37,6 +37,13 @@ DSH 原生的**自动提交守卫**：本会话改过文件、却想接着跑下
 - 关闭：`DSH_AUTOCOMMIT=0` / `KIMI_AUTOCOMMIT=0`，或全局标记文件 `~/.kimi-code/hooks/session_autocommit.off`
 - 仓库级关闭：仓库根放 `.kimi-autocommit-off`
 - 干跑：`DSH_AUTOCOMMIT_DRY_RUN=1` / `KIMI_AUTOCOMMIT_DRY_RUN=1`，或标记文件 `~/.kimi-code/hooks/session_autocommit.dryrun`
+
+## 内部阈值与状态（代码常量，不可配）
+
+- 每会话最多累积 5000 条触碰路径；会话 `session/disposed` 时清空该会话的触碰集合与防循环计数。
+- 单条 git 子进程超时 20s；阻断文案最多列 20 个文件；提交标题截断 60 字符（缺省 `(未命名会话)`）。
+- 防循环按（会话, 事件）记录「文件集合 hash + 次数 + 时间」，窗口 `blockWindowMs` 内同文件集最多挡 `maxBlocks` 次，超限放行并记 `loop-guard-allow`。
+- 环境变量/标记文件每次判定实时读取（不缓存），改开关不必重启。
 
 ## 依赖
 

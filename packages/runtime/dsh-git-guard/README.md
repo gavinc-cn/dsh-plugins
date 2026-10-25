@@ -28,7 +28,7 @@ DSH 原生的 **git 操作归属守卫**：在 bash 工具真正执行前拦下�
 | `PreToolUse` / `Bash` | `tools/pre-execute`（waterfall） | 只处理工具名 `bash`（大小写不敏感），返回 `{kind:'deny', reason}`；放行走 `next()` |
 | 退出码 2 + stderr | deny 的 `reason` | 文本与 Python 版逐字一致 |
 | 退出码 0 | `next()` | 不覆盖下游决定 |
-| `tool_input.cwd` / 会话 state.json | `exec.arguments.workdir` → `exec.agent.session.header.cwd` → `process.cwd()` | 不再读 `~/.kimi-code/sessions/*/state.json` |
+| `tool_input.cwd` / 会话 state.json | `exec.arguments.cwd` → `exec.arguments.workdir` → `exec.agent.session.header.cwd` → `process.cwd()` | 不再读 `~/.kimi-code/sessions/*/state.json`；bash 参数里的 `cwd` 优先于 `workdir` |
 
 脚本自身异常按 **fail-open** 放行（与 Python hook 的异常语义一致），并写 `error:pre-execute` 日志。
 
@@ -92,9 +92,10 @@ node --test test/plugin.test.mjs      # 单测（Node v24 下不能写 `node --t
 node test/differential.mjs            # 与 Python 版的差分对比（需要 python3 + 源 hook 在位）
 ```
 
-- 单测：17 个用例（非 bash 放行 / 快路径不 spawn git〔用假 git 探针验证〕/ commit 前缀与严格模式 /
-  heredoc 与 `-F` / reset 归属 / checkout / 多段 / branch+config+tag / dryRun / enabled=false /
-  内部异常 fail-open / cwd 解析顺序 / 日志事件 / 参数形状健壮性）。
+- 单测：20 个用例（非 bash 放行 / 工具名大小写不敏感 / 快路径不 spawn git〔用假 git 探针验证〕/
+  commit 前缀与严格模式 / heredoc 与 `-F` / reset 归属 / checkout / 多段 / 段首之外受控子命令
+  fail-closed / 只读子命令与引号内参数 / branch+config+tag 只读形式 / dryRun / enabled=false /
+  内部异常 fail-open / deny 原因点出前缀 / cwd 解析顺序 / 日志事件 / 参数形状健壮性）。
 - 差分：`test/differential.mjs` 在 `/tmp/dsh-git-guard-diff-*` 里造 10 个 cwd
   （有远端仓库 / 无远端仓库 / 已推送仓库 / HEAD 指向 agent 分支 / 暂存区脏 / 范围内混入用户提交 /
   HEAD 是用户提交 / 当前分支是 main / 非仓库目录 / 仓库子目录），把 Python `evaluate()` 与
@@ -102,11 +103,11 @@ node test/differential.mjs            # 与 Python 版的差分对比（需要 p
   命中次数（确认分支真的被打到）；语料 = Python 单测里抽出的 231 条命令（含 33 条 f-string）
   + 合成用例，去重后 457 条。另外会打印判定分布的抽点表。要求：**不匹配数 = 0**。
 
-## 测试证据（2026-10-08 实跑）
+## 测试证据（单测 2026-10-24 复跑；差分 2026-10-08 实跑）
 
 ```
-$ node --test test/plugin.test.mjs
-ℹ tests 17   ℹ pass 17   ℹ fail 0
+$ node --test test/plugin.test.mjs               # 2026-10-24 复跑
+ℹ tests 20   ℹ pass 20   ℹ fail 0
 
 $ node test/differential.mjs                     # exit=0，约 32s
 语料合计 457 条命令 × 10 个 cwd = 4570 次判定
@@ -134,17 +135,16 @@ function dsh-git-guard
 4. **`~user` 不展开**：只展开 `~` 与 `~/`（Python 在找不到该用户时同样原样返回，常见用法一致）。
 5. **工具名**：只处理 `bash`（大小写不敏感）。DSH 若换用别的 shell 工具名，本插件不会介入。
 6. **只用了一个扩展点**：`agent/turn-stopping` / `session/event` / `session/disposed` 均未使用。
-7. **子 shell 绕过**：`(git reset ...)` 仅在括号紧跟段首时识别，子 shell 仍可绕过——与 Python 版
-   完全相同的残余风险，靠权限层 deny 规则叠加兜底。
+7. **子 shell / 字符串包裹绕过**：2026-10-12 起对「`git` 不在命令段首但段内出现受控子命令」做
+   fail-closed 拒绝，`(git reset ...)` 这类子 shell 前缀写法已被识别并拦下（实测 `(git reset --hard)`、
+   `(git commit -m x)` 均 deny，与 Python 版同口径）。真正残余的绕过是把整条命令放进字符串的写法，
+   如 `bash -c 'git reset --hard'`、`eval "git reset --hard"`（实测 allow）——靠权限层 deny 规则叠加兜底。
 8. **POSIX 语义**：按 Linux/macOS 路径语义移植，不考虑 Windows 盘符/反斜杠路径。
 9. **`dryRun` 不写任何状态**：只记日志，便于安全观察误伤。
 
-## 测试证据（2026-10-08）
+## 测试证据（2026-10-08 差分旧基线：5 个 cwd）
 
 ```
-$ node --test test/plugin.test.mjs
-ℹ tests 17   ℹ pass 17   ℹ fail 0
-
 $ node test/differential.mjs
 语料合计 449 条命令 × 5 个 cwd = 2245 次判定
 Python 判定分布 ：deny 1348 / allow 897 / error 0（拒绝原因 175 种）

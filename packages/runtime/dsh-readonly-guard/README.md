@@ -1,5 +1,11 @@
 # @gavinc-cn/dsh-readonly-guard
 
+> **2026-10-24 已从 `@gavinc-cn/dsh-plugins-runtime` 退役**：runtime bundle 的 insert 行与
+> `dependencies` 已移除（包本体保留在仓库 `packages/runtime/dsh-readonly-guard/` 作回滚真源，
+> npm 上的 0.1.0 也仍在，可在 profile 手写 insert 单独挂）。退役理由：bash 只读判定已被第五档
+> `dsh-path-rules`、第六档 `dsh-write-guard`（按写入目标判、更精准）与原生沙箱覆盖；且它判
+> 「非只读」时不调用 `next()`、会短路其后注册的闸门（见 `doc_ai/spec/permissions/permission-gates.md`）。
+
 DSH 原生的**只读守卫**：把每一次 `bash` 工具调用分类为「只读」或「可能修改系统」。
 只读放行；可能修改系统的默认转 **DSH 原生审批弹窗**（`ask`），用户批准后才执行。
 

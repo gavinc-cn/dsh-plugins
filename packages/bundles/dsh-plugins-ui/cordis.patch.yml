@@ -5,13 +5,13 @@
 # 半边经 exports["./client"] 指向 lib/client.bundle.js，node 半边是空 apply()。
 # 另 1 个 `dsh-patch-ask-expand` 的运行体在宿主侧（没有 `dsh.client`，启动时对官方 client bundle
 # 打幂等文本补丁），但它的效果完全是 GUI 观感（提问行默认展开）⇒ 同样归本包，否则「只想装 UI 包」
-# 的人发现不了它。修订缘由与取舍见 `docs/plan-2026-10-15-ask-expand-to-ui-bundle.md`。
+# 的人发现不了它。修订缘由与取舍见 `doc_ai/plan/202610/20261015_0546_ask-expand-to-ui-bundle.md`。
 # 其余宿主侧组件（记忆/守卫/沙箱白名单等）在 @gavinc-cn/dsh-plugins-runtime 里。
 # 源码树分组（packages/ui|runtime）跟着这个判据走：`packages/ui/` 下的包都在本 bundle 里，
 # 唯一例外是不随任何 bundle 下发的 `kanban-board`（见下）。
 #
 # 2026-10-15：**`kanban-board` 已从本包移除**（行与 dependencies 一并删除）。组件包本体仍留在
-# 仓库 `packages/ui/kanban-board/`（npm 上的 0.1.2 也还在），只是**不再随任何 bundle 下发**：
+# 仓库 `packages/ui/kanban-board/`（npm 上的 0.1.3 也还在，2026-10-24 实测 latest），只是**不再随任何 bundle 下发**：
 # 本包因此是 5 个组件（4 个纯 UI + dsh-patch-ask-expand）。要在某个 profile 重新挂它，就在该 profile 的
 # cordis.patch.yml 里手写一条 insert（`- insert: - id: kanban-board` + name `@gavinc-cn/kanban-board`）——
 # 注意手写 insert 在 Plugins 面板里没有行、也没有开关（面板只渲染 bundle 包自带 patch 的行），
