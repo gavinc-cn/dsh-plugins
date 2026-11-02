@@ -22,15 +22,17 @@
 [@gavinc-cn/dsh-plugins-ui](../dsh-plugins-ui/README.md)。归属判据自 2026-10-15 起是
 **「面向谁」而不是「代码跑在哪」**：`dsh-patch-ask-expand` 的运行体确实在宿主侧（启动时对官方
 `dsh-client-ui-tool` 的 client bundle 打文本补丁），但它是纯 GUI 观感功能 ⇒ 归 UI 包，
-免得「只想装 UI 包」的人发现不了它。两个包合起来 = **14 行**（UI 5 + 本包 9）。
+免得「只想装 UI 包」的人发现不了它。两个包合起来 = **16 行**（UI 8 + 本包 8）。
 `kanban-board`、`sandbox-path-allowlist` 与 `dsh-readonly-guard` 不随任何 bundle 下发
 （`sandbox-path-allowlist` 2026-10-17 由 `dsh-path-rules` 合并退役、`dsh-readonly-guard`
-2026-10-24 退役，白名单/只读判定能力分别由 `dsh-path-rules` 与第五/六档 + 原生沙箱承接）。
+2026-10-24 退役，白名单/只读判定能力分别由 `dsh-path-rules` 与第五/六档 + 原生沙箱承接）；
+`dsh-autocommit` 2026-11-01 迁入 `@gavinc-cn/touchstone-dsh` 的 bundle patch（行 id 全树唯一，
+两边都带会判 unaddressable），本仓只留包体作真源。
 
 ## 安装
 
 ```bash
-# 装进某个 profile（pnpm 会把依赖里的 9 个组件包一并装上）
+# 装进某个 profile（pnpm 会把依赖里的 8 个组件包一并装上）
 dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 ```
 
@@ -41,19 +43,25 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-runtime
 - 改了 `dsh.profile.bundles` 要**重启宿主**才生效（启动时读）；profile patch 层是 live 热重载，
   行级开关不需要重启。
 
-## 组件（9 个）
+## 组件（8 个）
 
 | 行 id | 包 | 做什么 |
 |---|---|---|
 | `dsh-superpowers-priming` | `@gavinc-cn/dsh-superpowers-priming` | 给「重开的会话」补一份 superpowers 开场说明（按会话历史判重，不重复注入） |
 | `dsh-memory` | `@gavinc-cn/dsh-memory` | 跨会话记忆：首轮注入两级记忆索引，回合收尾限流提示写记忆 |
-| `dsh-autocommit` | `@gavinc-cn/dsh-autocommit` | 回合收尾时若本会话还有未提交改动，挡下并提示模型先提交 |
 | `dsh-git-guard` | `@gavinc-cn/dsh-git-guard` | git 操作归属守卫（按提交前缀/分支命名判定，拦下越权 git 写操作） |
 | `dsh-file-guard` | `@gavinc-cn/dsh-file-guard` | 回合收尾比对「本会话写下的文件」与磁盘漂移，只报告不自动改回 |
 | `dsh-path-rules` | `@gavinc-cn/dsh-path-rules` | 第五权限模式「路径规则」的逐调用闸门：项目内可读写 / 项目外读允许·写审批 / 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行。**只在预设身份为 `path-rules` 时介入**，其余四档完全空转（2026-10-17 起承接退役的 `sandbox-path-allowlist` 白名单能力；`autoWhitelist` 可把用户批准的升权写入目录自动记入白名单）。**v2（0.1.2）**：判不出读写的命令交给沙箱在运行时拦写（`unanalyzable: pass`）、判不出的命令做黑名单文本粗检（`opaqueBlacklistScan`）。**v3（0.2.0，2026-10-24）**：`staticGate: true`（默认）保留逐调用静态判定；配置 `staticGate: false` 后写判定交给执行层多根件（`dsh-sandbox-whitelist` + `dsh-fs-whitelist`），本插件只留黑名单与审批学习；预置升权 `preemptiveWhitelistEscalation` 已删除 |
 | `dsh-write-guard` | `@gavinc-cn/dsh-write-guard` | 第六权限模式「完全权限（拦截）」的逐调用写入闸门：读任意文件 / 项目内 / 白名单写直通，越界写弹框并自动学习白名单，判不出的 `bash`·`pwsh` 交当前会话模型判定。**只在预设身份为 `write-guard` 时介入**，其余档位完全空转；插件停用 = 完全不拦截 |
 | `dsh-sandbox-whitelist` | `@gavinc-cn/dsh-sandbox-whitelist` | 多根沙箱 provider（方案 C，Linux + Windows）：顶替官方 `- id: sandbox`，把项目根 + 白名单根 + 临时区变成执行层可写根（Linux bwrap/Landlock；Windows 官方 windows-acl 受限令牌 + 写 SID ACE），其余只读；只对 `enforcePresets` 命中的会话追加白名单根。**包内默认 `disabled: true`**，启用必须同时停用官方 `sandbox` 行；macOS 未实现（apply 拒绝） |
 | `dsh-fs-whitelist` | `@gavinc-cn/dsh-fs-whitelist` | fs provider 替换件（方案 C 第 2 步，跨平台）：顶替官方 `- id: fs-sandbox`，让 `write`/`edit` 的 fence 也把白名单 + 自动白名单目录当作可写根（trusted-code 策略判定，不是内核边界）；只对 `enforcePresets` 命中的会话生效。**包内默认 `disabled: true`**，启用必须同时停用官方 `fs-sandbox` 行，否则 `ctx.fs` 抢注册 / 缺失会让 read/write/edit 四个工具一起消失 |
+
+> **已迁出（2026-11-01）**：`dsh-autocommit`（自动提交守卫）的行与依赖已从本 bundle 移除，
+> 并进 `@gavinc-cn/touchstone-dsh` 的 bundle patch 第二行（`id: dsh-autocommit`，
+> `name: "@gavinc-cn/touchstone-dsh/autocommit"`）。理由：它是 Touchstone 的产品行为
+> （看板卡片一轮结束/挂起时把本会话改动落成提交），且**同一个行 id 全树只能出现一次** ——
+> 两边都带会判 unaddressable 并双份拦截。包本体留在仓库 `packages/runtime/dsh-autocommit/` 作
+> 真源存档（`scripts/check-bundles.mjs` 的 UNBUNDLED 已登记）。
 
 > **已退役（2026-10-24）**：`dsh-readonly-guard` 的行与依赖已从本 bundle 移除（包本体仍留在仓库
 > `packages/runtime/dsh-readonly-guard/` 作回滚真源，也可在 profile 手写 insert 单独挂）。

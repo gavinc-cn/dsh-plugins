@@ -44,9 +44,11 @@
     - id: dsh-memory
       name: "@gavinc-cn/dsh-memory"
 
-- insert:
-    - id: dsh-autocommit
-      name: "@gavinc-cn/dsh-autocommit"
+# dsh-autocommit：2026-11-01 **迁出**（行 + dependencies 移除）——它是 Touchstone 的产品行为
+# （看板卡片一轮结束/挂起时把本会话改动落成提交），已并进 @gavinc-cn/touchstone-dsh 的 bundle patch
+# 第二行：`- id: dsh-autocommit / name: "@gavinc-cn/touchstone-dsh/autocommit"`（包内子路径）。
+# 不随本包下发的原因：同一个行 id 全树只能出现一次，两边都带会判 unaddressable 且双份拦截。
+# 包本体留在 packages/runtime/dsh-autocommit/ 作真源存档（并在 scripts/check-bundles.mjs 的 UNBUNDLED 登记）。
 
 - insert:
     - id: dsh-git-guard

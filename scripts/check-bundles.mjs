@@ -46,7 +46,11 @@ const GROUPS = ['ui', 'runtime', 'bundles']
 //                 只读判定已被第五档 path-rules、第六档 write-guard（按写入目标判）与原生沙箱覆盖，
 //                 且它判「非只读」时不调 next() 会短路其后闸门。包本体留在
 //                 packages/runtime/dsh-readonly-guard/ 作回滚真源。
-const UNBUNDLED = new Set(['kanban-board', 'sandbox-path-allowlist', 'dsh-readonly-guard'])
+//   dsh-autocommit：2026-11-01 **迁出本仓**（行 + dependencies 移除）——它是 Touchstone 的产品行为
+//                 （看板卡片一轮结束/挂起时落提交），已并进 @gavinc-cn/touchstone-dsh 的 bundle patch
+//                 第二行（name = 包内子路径 @gavinc-cn/touchstone-dsh/autocommit）。包本体留在
+//                 packages/runtime/dsh-autocommit/ 作真源存档；**同 id 行不能两边都在**，故本仓不再引用。
+const UNBUNDLED = new Set(['kanban-board', 'sandbox-path-allowlist', 'dsh-readonly-guard', 'dsh-autocommit'])
 
 // 判据 6 的期望映射：源码树分组 → 该分组的包应归属的 bundle 包名。
 // 为什么要机检：2026-10-15 把 dsh-patch-ask-expand 从 runtime 分组搬到 ui 分组 + 从运行时 bundle
