@@ -1,16 +1,22 @@
 # dsh-plugins —— @gavinc-cn 的 DSH 插件集
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**17 个组件包** +
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**20 个组件包** +
 **2 个 bundle** + **1 个聚合元包**。本仓库是这些插件源码的真源，npm 上的包由这里的
 `packages/<分组>/<包>/` 逐个发布。
+
+> 2026-10-29 新增 `dsh-prompt-recall@0.1.0`（`ArrowUp` 召回上一条真人提问，2026-11-01 增加
+> `ArrowDown` 恢复原草稿）与 `dsh-feishu@0.1.0`（飞书私聊桥）；2026-10-30 新增
+> `dsh-session-live-metrics@0.1.0`（近 1 分钟速度与费用）；三者接入 UI bundle，后者升至 0.1.5、变为 8 行。
+> 2026-11-01 `dsh-autocommit` 的行与依赖从运行时 bundle 迁出（并入 `@gavinc-cn/touchstone-dsh`）
+> ⇒ 运行时 bundle 变为 8 行，两 bundle 合计 **16 行**。本文顶部的包数已同步更新。
 
 ## 装什么、怎么装
 
 | 想要什么 | 装哪个 | 装完得到 |
 |---|---|---|
-| 全都要 | `@gavinc-cn/dsh-plugins` | 17 个包：14 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
-| 只要 UI 那 5 个 | `@gavinc-cn/dsh-plugins-ui` | 6 个包：5 个面向 Web GUI 的组件 + bundle |
-| 只要运行时那 9 个 | `@gavinc-cn/dsh-plugins-runtime` | 10 个包：9 个宿主侧组件 + bundle |
+| 全都要 | `@gavinc-cn/dsh-plugins` | 20 个包：16 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
+| 只要 UI 那 8 个 | `@gavinc-cn/dsh-plugins-ui` | 9 个包：8 个面向 Web GUI 的组件 + bundle |
+| 只要运行时那 8 个 | `@gavinc-cn/dsh-plugins-runtime` | 9 个包：8 个宿主侧组件 + bundle |
 
 > **版本说明（2026-10-25，第 9 轮）**：① 新增组件包 `dsh-sandbox-whitelist@0.2.0` —— 多根沙箱
 > provider（Linux bwrap/Landlock；Windows 官方 windows-acl 受限令牌 + 写 SID ACE）：顶替官方
@@ -86,7 +92,7 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 
 ## 包里有什么
 
-### `@gavinc-cn/dsh-plugins-ui`（5 个，面向 Web GUI）
+### `@gavinc-cn/dsh-plugins-ui`（8 个，面向 Web GUI）
 
 | 组件 | 说明 |
 |---|---|
@@ -94,7 +100,10 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 | `dsh-session-unread-persist` | 会话列表「已完成未查看」绿点持久化到 localStorage：刷新/重开浏览器后仍在，点开会话照常消失 |
 | `dsh-turn-labels` | 把右侧轮次刻度轨换成常驻文字：每轮一行显示提问，当前轮高亮，hover 预览，点击跳转；提问条目直接显示用户回答（蓝色区分、hover 出完整问答，读不到回答时退回原版小横杠） |
 | `dsh-sidebar-width-persist` | 左侧边栏拖动宽度持久化：刷新后仍是上次的宽度，收起再展开不丢 |
-| `dsh-patch-ask-expand` | 让 `ask_user_question` 那一行默认展开。**本 bundle 唯一运行体在宿主侧的组件**：启动时对官方 client bundle 打幂等文本补丁（保留 `.orig` 备份，锚点对不上就跳过） |
+| `dsh-session-live-metrics` | 状态栏显示最近 1 分钟 decode 加权输出速度，以及当前主 session 按 DeepSeek 实际模型、缓存桶与峰谷时段估算的 token 费用（不汇总子代理、不含 Search/Fetch）；含宿主 projection，新增后需重启 |
+| `dsh-prompt-recall` | 当前会话空输入框按 `ArrowUp` 召回上一条真人提问的完整文本；召回后按 `ArrowDown` 恢复原草稿。不自动发送 |
+| `dsh-feishu` | 飞书私聊桥（Host + client 同包）：面板扫码配置应用、一次性绑定码绑定 open_id、每用户独立 DSH 会话、文本/图片/文件入站、答复与云文档出站、飞书内提问/审批双通道；仅私聊且仅插件自建会话 |
+| `dsh-patch-ask-expand` | 让 `ask_user_question` 那一行默认展开。**本 bundle 唯一纯宿主侧实现**：启动时对官方 client bundle 打幂等文本补丁（保留 `.orig` 备份，锚点对不上就跳过） |
 
 > 归属判据自 2026-10-15 起是**「面向谁」**：`dsh-patch-ask-expand` 的实现跑在宿主侧，但效果是
 > 纯 GUI 观感 ⇒ 归 UI bundle，免得只想装 UI 包的人发现不了它。
@@ -103,13 +112,12 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 > `packages/ui/kanban-board/`、npm 上也可单独安装，但装 `dsh-plugins-ui` 不会带上它。
 > 要用就在 profile 的 `cordis.patch.yml` 里手写一条 insert（面板里不会有行/开关）。
 
-### `@gavinc-cn/dsh-plugins-runtime`（9 个，宿主侧）
+### `@gavinc-cn/dsh-plugins-runtime`（8 个，宿主侧）
 
 | 组件 | 说明 |
 |---|---|
 | `dsh-superpowers-priming` | 会话重开时补注入一次 superpowers 开场说明；已有则跳过，避免重复占上下文 |
 | `dsh-memory` | 跨会话记忆：首次 prompt 注入两级记忆索引，回合结束按限流提示写入（记忆根 `~/.agents/memory`） |
-| `dsh-autocommit` | 自动提交守卫：本会话改过文件却要接着跑下一回合时挡下，提示模型先提交（不自行提交） |
 | `dsh-git-guard` | git 归属守卫：拦下缺 agent 前缀的 commit、越界的 reset/amend/branch/worktree/merge/tag/config 等写操作 |
 | `dsh-file-guard` | 文件漂移守卫：每轮收尾比对「本会话写过的文件」与磁盘，发现被外部覆盖/回退时提示（不自动改回） |
 | `dsh-path-rules` | 第五权限模式「路径规则」的逐调用闸门：项目内可读写 / 项目外读允许·写审批 / 白名单直通 / 黑名单读写都审批 / bash·pwsh 只读放行；只在预设身份为 `path-rules` 时介入（2026-10-17 起承接退役的 `sandbox-path-allowlist` 白名单能力；2026-10-18 起 `autoWhitelist` 可把用户批准的升权写入目录自动记入白名单） |
@@ -122,6 +130,13 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 > `dsh-path-rules`、第六档 `dsh-write-guard`（按写入目标判、更精准）与原生沙箱覆盖，且它判
 > 「非只读」时不调用 `next()`、会短路其后注册的闸门。包本体与 npm 上的 0.1.0 仍保留，可在
 > profile 手写 insert 单独挂。
+
+> `@gavinc-cn/dsh-autocommit`（自动提交守卫）**2026-11-01 起从本 bundle 迁出**：它属于
+> Touchstone 的产品行为（看板卡片一轮结束/挂起时把本会话改动落成提交），已并进
+> `@gavinc-cn/touchstone-dsh` 的 bundle patch 第二行（`id: dsh-autocommit`，
+> `name: "@gavinc-cn/touchstone-dsh/autocommit"`）。**同一个行 id 全树只能出现一次**，
+> 两边都带会判 `unaddressable` 并双份拦截；包本体与 npm 上的 0.1.2 仍保留，可在 profile
+> 手写 insert 单独挂。
 
 ### `@gavinc-cn/dsh-plugins`（聚合元包）
 
@@ -141,10 +156,12 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 
 ```
 packages/
-  ui/          6 个面向 Web GUI 的组件包（4 个声明 dsh.client.platform: "web"；dsh-patch-ask-expand 宿主侧实现；
+  ui/          9 个面向 Web GUI 的组件包（7 个声明 dsh.client.platform: "web"，其中 dsh-feishu 与
+              dsh-session-live-metrics 为 Host + client 同包；dsh-patch-ask-expand 宿主侧实现；
               kanban-board 不随 bundle 下发）
-  runtime/     11 个宿主（node）侧组件包（sandbox-path-allowlist 与 dsh-readonly-guard 不随 bundle 下发）
-  bundles/     dsh-plugins-ui（UI 5 行）/ dsh-plugins-runtime（运行时 9 行）/ dsh-plugins（聚合元包）
+  runtime/     11 个宿主（node）侧组件包（sandbox-path-allowlist、dsh-readonly-guard 与
+               dsh-autocommit 不随本 bundle 下发）
+  bundles/     dsh-plugins-ui（UI 8 行）/ dsh-plugins-runtime（运行时 8 行）/ dsh-plugins（聚合元包）
 scripts/
   deploy-to-dsh.sh     把仓库铺到 dsh 实际加载的「共享活副本」~/.dsh/profiles/node_modules/@gavinc-cn/
   check-bundles.mjs    结构校验：行 id 全局唯一、行 ∈ dependencies、目录名 = 包名短名
@@ -172,14 +189,14 @@ bash scripts/deploy-to-dsh.sh                # 铺到共享活副本（patch 层
 5. **不要在 profile 目录里跑 `pnpm install`**：bundle 的 `dependencies` 会把组件包下载成 profile
    自己的副本（`<profile>/node_modules/@gavinc-cn/*`），按 Node 解析顺序盖住共享活副本里你改的那份源码。
 6. 面板上组件行的标题/说明来自**组件包自己**的 `locale/*.json`，卡片标题/描述来自 **bundle 包**的
-   `locale/*.json`；宿主启动时缓存行元数据 ⇒ 运行中改 `locale` 要重启宿主才看得到。
+   `locale/*.json`；宿主每次列举都实时读盘（2026-10-15 实测）⇒ 改 `locale` 后刷新面板即可。
 
 ## 发布
 
-顺序有硬依赖：**17 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败；
+顺序有硬依赖：**20 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败；
 其中 `dsh-sandbox-whitelist` 必须先于 `dsh-fs-whitelist`（后者依赖前者的 `./roots` subpath），
 `dsh-path-rules` 必须先于 `dsh-write-guard`（依赖它的 subpath exports）与运行时 bundle；
-两个 provider 是运行时 bundle 第 8/9 行的依赖，也须在 bundle 之前发）。
+两个 provider 是运行时 bundle 第 7/8 行的依赖，也须在 bundle 之前发）。
 
 ```bash
 npm publish <tarball> --registry=https://registry.npmjs.org --access public
