@@ -1,8 +1,9 @@
 # @gavinc-cn/dsh-plugins-ui —— 「UI 组件」的组合行（2026-10-13 从 @gavinc-cn/dsh-plugins 拆出）。
 #
 # 归属判据（2026-10-15 修订）：**面向 Web GUI 的组件归本包** —— 用户视角，装 UI 包就是为了改
-# GUI 观感。其中 4 个是纯浏览器组件：package.json 里声明 `dsh.client.platform: "web"`，浏览器
-# 半边经 exports["./client"] 指向 lib/client.bundle.js，node 半边是空 apply()。
+# GUI 观感。其中 6 个声明 `dsh.client.platform: "web"`：浏览器半边经 exports["./client"] 指向
+# lib/client.bundle.js；`dsh-feishu`（2026-10-29 新增）的宿主半边负责飞书桥接，浏览器半边提供
+# 扫码/绑定/连接面板，仍按「面向 GUI」归本包。
 # 另 1 个 `dsh-patch-ask-expand` 的运行体在宿主侧（没有 `dsh.client`，启动时对官方 client bundle
 # 打幂等文本补丁），但它的效果完全是 GUI 观感（提问行默认展开）⇒ 同样归本包，否则「只想装 UI 包」
 # 的人发现不了它。修订缘由与取舍见 `doc_ai/plan/202610/20261015_0546_ask-expand-to-ui-bundle.md`。
@@ -12,7 +13,7 @@
 #
 # 2026-10-15：**`kanban-board` 已从本包移除**（行与 dependencies 一并删除）。组件包本体仍留在
 # 仓库 `packages/ui/kanban-board/`（npm 上的 0.1.3 也还在，2026-10-24 实测 latest），只是**不再随任何 bundle 下发**：
-# 本包因此是 5 个组件（4 个纯 UI + dsh-patch-ask-expand）。要在某个 profile 重新挂它，就在该 profile 的
+# 本包因此是 7 个组件（6 个带 dsh.client + dsh-patch-ask-expand）。要在某个 profile 重新挂它，就在该 profile 的
 # cordis.patch.yml 里手写一条 insert（`- insert: - id: kanban-board` + name `@gavinc-cn/kanban-board`）——
 # 注意手写 insert 在 Plugins 面板里没有行、也没有开关（面板只渲染 bundle 包自带 patch 的行），
 # 且行 id 在整棵组合树里只能出现一次（见下）。
@@ -32,10 +33,11 @@
 #
 # 机器相关配置（本机检出路径、状态目录、日志路径）**不进本文件**：写在各 profile 的覆盖行里。
 #
-# 依赖：本包在 package.json 的 dependencies 里声明下述 5 个组件包 —— 装本包即把它们一并装上，
-# 各 profile 因此能按包名解析到每一行。发布顺序：**5 个组件包先发，本包最后发**。
+# 依赖：本包在 package.json 的 dependencies 里声明下述 7 个组件包 —— 装本包即把它们一并装上，
+# 各 profile 因此能按包名解析到每一行。发布顺序：**7 个组件包先发，本包最后发**。
 #
-# 改组件集合 = 改本文件（patch 层 live 热重载，不需要重装/重启）；改完把仓库真源铺到共享活副本
+# 改组件集合 = 改本文件 + package.json dependencies + 组件包；已有行的客户端内容可热替换，
+# **新增/删除行仍需重启宿主**。改完把仓库真源铺到共享活副本
 # （在仓库根执行：bash scripts/deploy-to-dsh.sh dsh-plugins-ui）。
 #
 # 注意：别再对 profile 跑 pnpm install —— registry 版会盖住共享活副本里那份（见仓库 README）。
@@ -56,10 +58,26 @@
     - id: dsh-sidebar-width-persist
       name: "@gavinc-cn/dsh-sidebar-width-persist"
 
+# 状态栏指标（2026-10-30）：宿主投影 + 浏览器胶囊。近 60 秒 decode 速度与当前主 session
+# 的 DeepSeek 模型 token 费用估算；不改官方状态栏组件，只新增两个 composer.dock 条目。
+- insert:
+    - id: dsh-session-live-metrics
+      name: "@gavinc-cn/dsh-session-live-metrics"
+
+# 纯浏览器组件：当前会话空输入框按 ArrowUp 召回上一条真人提问的完整文本。
+- insert:
+    - id: dsh-prompt-recall
+      name: "@gavinc-cn/dsh-prompt-recall"
+
+# 飞书桥（2026-10-29）：Host + client 同包。宿主侧负责扫码配置/绑定私聊/收发出站/提问审批，
+# 浏览器侧提供侧栏面板；仅私聊、仅绑定 open_id、仅插件自有会话。
+- insert:
+    - id: dsh-feishu
+      name: "@gavinc-cn/dsh-feishu"
+
 # dsh-patch-ask-expand（2026-10-15 从 runtime bundle 移入）：启动时对官方 dsh-client-ui-tool 的
-# client bundle 打幂等文本补丁，让「提问 / 回答」那一行默认展开。**它是唯一运行体在宿主侧的行**：
-# 会写官方包的源文件（保留 .orig 备份），失败只记日志、不影响 dsh 启动。
-# 行位置放在 4 个纯 UI 行之后 = 保持拆分前的相对顺序（kanban-board 移除后：4 行 UI + 本行 + runtime 7 行）。
+# client bundle 打幂等文本补丁，让「提问 / 回答」那一行默认展开。**它是唯一直接改写官方包文件的
+# 行**：会写官方包的源文件（保留 .orig 备份），失败只记日志、不影响 dsh 启动。
 - insert:
     - id: dsh-patch-ask-expand
       name: "@gavinc-cn/dsh-patch-ask-expand"

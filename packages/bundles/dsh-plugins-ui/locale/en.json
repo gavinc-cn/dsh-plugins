@@ -1,5 +1,5 @@
 {
   "meta": {
-    "description": "Five Web-GUI-facing components: dimmed text, session unread dots, turn labels, sidebar width persistence, and expanded ask rows (patched host-side). Each row is a separate switch."
+    "description": "Eight Web-GUI-facing components: dimmed text, session unread dots, turn labels, sidebar width persistence, 1-minute speed and cost, previous-prompt recall, the Feishu bridge (QR provisioning, binding, private chat, cloud docs, questions and approvals), and expanded ask rows (patched host-side). Each row is a separate switch."
   }
 }
