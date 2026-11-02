@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Previous prompt recall",
+    "description": "Press Arrow Up in an empty composer to recall the latest genuine user prompt in the current session; press Arrow Down to restore the previous draft. Never submits automatically."
+  }
+}
