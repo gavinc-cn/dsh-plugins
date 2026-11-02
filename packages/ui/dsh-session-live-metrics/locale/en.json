@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "1-minute speed & cost",
+    "description": "Shows 60-second decode-weighted output speed and an estimated model-token cost for the current main session, priced by the actual DeepSeek model, cache hit/miss, output, and peak/off-peak period. Subagents and Search/Fetch are excluded."
+  }
+}

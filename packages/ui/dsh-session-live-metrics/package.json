@@ -1,0 +1,50 @@
+{
+  "name": "@gavinc-cn/dsh-session-live-metrics",
+  "description": "在 DSH composer 状态栏显示最近 1 分钟 decode 加权输出速度，以及当前主 session 按 DeepSeek 实际模型、缓存桶与峰谷时段估算的模型 token 费用（不汇总子代理，不含 Search/Fetch）。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "default": "./lib/client.bundle.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "peerDependencies": {
+    "zod": "*"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/ui/dsh-session-live-metrics"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/ui/dsh-session-live-metrics#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

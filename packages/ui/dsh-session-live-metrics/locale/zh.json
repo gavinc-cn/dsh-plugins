@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "近 1 分钟速度与费用",
+    "description": "在状态栏显示最近 60 秒 decode 加权输出速度，以及当前主 session 按 DeepSeek 实际模型、缓存命中/未命中、输出与峰谷时段估算的模型 token 费用；不汇总子代理，不含 Search/Fetch。"
+  }
+}
