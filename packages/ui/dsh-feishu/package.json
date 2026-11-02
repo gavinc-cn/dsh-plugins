@@ -1,0 +1,54 @@
+{
+  "name": "@gavinc-cn/dsh-feishu",
+  "description": "把飞书私聊接入 DSH：扫码配置应用、绑定用户私聊、文本/图片/文件入站、答复与云文档出站，飞书内提问与审批闭环。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "default": "./lib/client.bundle.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-storage-domain": "*",
+    "zod": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-storage-domain": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/ui/dsh-feishu"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/ui/dsh-feishu#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}
