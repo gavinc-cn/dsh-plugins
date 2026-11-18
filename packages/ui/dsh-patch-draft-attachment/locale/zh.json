@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "输入框草稿附件保留",
+    "description": "让输入框草稿里的截图 / 图片 / 文件在切换会话、刷新页面后还在：启动时对 dsh-client-ui-conversation 的 client bundle 打一个幂等文本补丁，附件额外持久化到 localStorage + IndexedDB，会话重建时还原。"
+  }
+}

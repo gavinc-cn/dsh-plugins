@@ -1,0 +1,36 @@
+{
+  "name": "@gavinc-cn/dsh-patch-draft-attachment",
+  "description": "让输入框草稿里的截图 / 图片 / 文件在切换会话、刷新页面后还在：启动时对 dsh-client-ui-conversation 的 client bundle 打一个幂等文本补丁，把附件额外持久化到 localStorage + IndexedDB 并在会话重建时还原。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.mjs"
+    },
+    "./patch": {
+      "default": "./lib/patch.mjs"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "scripts": {
+    "test": "node --test test/patch.spec.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/ui/dsh-patch-draft-attachment"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/ui/dsh-patch-draft-attachment#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

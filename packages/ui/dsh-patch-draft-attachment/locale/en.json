@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Keep composer draft attachments",
+    "description": "Keeps screenshots / images / files in the composer draft across session switches and page reloads: a host-side plugin text-patchers the dsh-client-ui-conversation client bundle so attachments are additionally persisted to localStorage + IndexedDB and restored when the session input shell is rebuilt."
+  }
+}
