@@ -1,22 +1,37 @@
 # dsh-plugins —— @gavinc-cn 的 DSH 插件集
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**20 个组件包** +
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**22 个组件包** +
 **2 个 bundle** + **1 个聚合元包**。本仓库是这些插件源码的真源，npm 上的包由这里的
 `packages/<分组>/<包>/` 逐个发布。
 
+> 2026-11-18 新增 `dsh-patch-unsent-session@0.1.0`（写过草稿的未发送会话保留在侧栏，标题取草稿首行）
+> 与 `dsh-patch-draft-attachment@0.1.0`（草稿里的截图/图片/文件跨会话与刷新保留）；两者接入 UI
+> bundle，后者升至 0.1.6、变为 10 行，两 bundle 合计 **18 行**。本文顶部的包数已同步更新。
 > 2026-10-29 新增 `dsh-prompt-recall@0.1.0`（`ArrowUp` 召回上一条真人提问，2026-11-01 增加
 > `ArrowDown` 恢复原草稿）与 `dsh-feishu@0.1.0`（飞书私聊桥）；2026-10-30 新增
 > `dsh-session-live-metrics@0.1.0`（近 1 分钟速度与费用）；三者接入 UI bundle，后者升至 0.1.5、变为 8 行。
 > 2026-11-01 `dsh-autocommit` 的行与依赖从运行时 bundle 迁出（并入 `@gavinc-cn/touchstone-dsh`）
-> ⇒ 运行时 bundle 变为 8 行，两 bundle 合计 **16 行**。本文顶部的包数已同步更新。
+> ⇒ 运行时 bundle 变为 8 行，两 bundle 合计 **16 行**。
 
 ## 装什么、怎么装
 
 | 想要什么 | 装哪个 | 装完得到 |
 |---|---|---|
-| 全都要 | `@gavinc-cn/dsh-plugins` | 20 个包：16 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
-| 只要 UI 那 8 个 | `@gavinc-cn/dsh-plugins-ui` | 9 个包：8 个面向 Web GUI 的组件 + bundle |
+| 全都要 | `@gavinc-cn/dsh-plugins` | 22 个包：18 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
+| 只要 UI 那 10 个 | `@gavinc-cn/dsh-plugins-ui` | 11 个包：10 个面向 Web GUI 的组件 + bundle |
 | 只要运行时那 8 个 | `@gavinc-cn/dsh-plugins-runtime` | 9 个包：8 个宿主侧组件 + bundle |
+
+> **版本说明（2026-11-18，第 11 轮）**：① 新增组件包 `dsh-patch-unsent-session@0.1.0` —— 让侧栏继续
+> 显示「写过草稿但还没发送」的 blank 会话，行标题取草稿首个非空行：宿主侧启动时对官方
+> `dsh-client-ui-workspace` 的 client bundle 打两处幂等文本补丁（`sessionVisible()`、
+> `displayTitle()`），不改 Session、不改草稿格式、不发网络请求。② 新增组件包
+> `dsh-patch-draft-attachment@0.1.0` —— 让 composer 草稿里的截图/图片/文件在切换会话、刷新页面后
+> 还能还原：同样是宿主侧幂等文本补丁（目标 `dsh-client-ui-conversation`），附件字节额外落
+> localStorage 索引 + IndexedDB。③ `dsh-plugins-ui@0.1.6`（10 行：加上述两行、依赖与卡片描述）。
+> ④ 聚合元包 `dsh-plugins@0.2.6`（组件数文案更新为 18 行）。
+>
+> 两个补丁包与 `dsh-patch-ask-expand` 机制相同：写官方包源文件（保留 `.orig` 备份），锚点对不上
+> 就只记日志、不影响 dsh 启动。**新增行需要重启宿主**（行集合是启动时读的）。
 
 > **版本说明（2026-10-25，第 9 轮）**：① 新增组件包 `dsh-sandbox-whitelist@0.2.0` —— 多根沙箱
 > provider（Linux bwrap/Landlock；Windows 官方 windows-acl 受限令牌 + 写 SID ACE）：顶替官方
@@ -92,7 +107,7 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 
 ## 包里有什么
 
-### `@gavinc-cn/dsh-plugins-ui`（8 个，面向 Web GUI）
+### `@gavinc-cn/dsh-plugins-ui`（10 个，面向 Web GUI）
 
 | 组件 | 说明 |
 |---|---|
@@ -103,10 +118,12 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 | `dsh-session-live-metrics` | 状态栏显示最近 1 分钟 decode 加权输出速度，以及当前主 session 按 DeepSeek 实际模型、缓存桶与峰谷时段估算的 token 费用（不汇总子代理、不含 Search/Fetch）；含宿主 projection，新增后需重启 |
 | `dsh-prompt-recall` | 当前会话空输入框按 `ArrowUp` 召回上一条真人提问的完整文本；召回后按 `ArrowDown` 恢复原草稿。不自动发送 |
 | `dsh-feishu` | 飞书私聊桥（Host + client 同包）：面板扫码配置应用、一次性绑定码绑定 open_id、每用户独立 DSH 会话、文本/图片/文件入站、答复与云文档出站、飞书内提问/审批双通道；仅私聊且仅插件自建会话 |
-| `dsh-patch-ask-expand` | 让 `ask_user_question` 那一行默认展开。**本 bundle 唯一纯宿主侧实现**：启动时对官方 client bundle 打幂等文本补丁（保留 `.orig` 备份，锚点对不上就跳过） |
+| `dsh-patch-ask-expand` | 让 `ask_user_question` 那一行默认展开。**宿主侧实现**：启动时对官方 client bundle 打幂等文本补丁（保留 `.orig` 备份，锚点对不上就跳过） |
+| `dsh-patch-unsent-session` | 让侧栏继续显示写过草稿但还没发送的 blank 会话，行标题取草稿首个非空行（超 48 字符截断）。宿主侧幂等文本补丁（目标 `dsh-client-ui-workspace` 的 `client.js`），只读侧栏已有的数据 |
+| `dsh-patch-draft-attachment` | 让 composer 草稿里的截图/图片/文件在切换会话、刷新页面后还在：宿主侧幂等文本补丁（目标 `dsh-client-ui-conversation`），附件字节额外持久化到 localStorage 索引 + IndexedDB 并在会话重建时还原 |
 
-> 归属判据自 2026-10-15 起是**「面向谁」**：`dsh-patch-ask-expand` 的实现跑在宿主侧，但效果是
-> 纯 GUI 观感 ⇒ 归 UI bundle，免得只想装 UI 包的人发现不了它。
+> 归属判据自 2026-10-15 起是**「面向谁」**：三个 `dsh-patch-*` 的实现都跑在宿主侧，但效果是
+> 纯 GUI 观感 ⇒ 归 UI bundle，免得只想装 UI 包的人发现不了它们。
 
 > `@gavinc-cn/kanban-board`（任务看板）**不随本 bundle 下发**：包还在本仓库
 > `packages/ui/kanban-board/`、npm 上也可单独安装，但装 `dsh-plugins-ui` 不会带上它。
@@ -156,12 +173,12 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 
 ```
 packages/
-  ui/          9 个面向 Web GUI 的组件包（7 个声明 dsh.client.platform: "web"，其中 dsh-feishu 与
-              dsh-session-live-metrics 为 Host + client 同包；dsh-patch-ask-expand 宿主侧实现；
+  ui/          11 个面向 Web GUI 的组件包（7 个声明 dsh.client.platform: "web"，其中 dsh-feishu 与
+              dsh-session-live-metrics 为 Host + client 同包；3 个 dsh-patch-* 宿主侧实现；
               kanban-board 不随 bundle 下发）
   runtime/     11 个宿主（node）侧组件包（sandbox-path-allowlist、dsh-readonly-guard 与
                dsh-autocommit 不随本 bundle 下发）
-  bundles/     dsh-plugins-ui（UI 8 行）/ dsh-plugins-runtime（运行时 8 行）/ dsh-plugins（聚合元包）
+  bundles/     dsh-plugins-ui（UI 10 行）/ dsh-plugins-runtime（运行时 8 行）/ dsh-plugins（聚合元包）
 scripts/
   deploy-to-dsh.sh     把仓库铺到 dsh 实际加载的「共享活副本」~/.dsh/profiles/node_modules/@gavinc-cn/
   check-bundles.mjs    结构校验：行 id 全局唯一、行 ∈ dependencies、目录名 = 包名短名
@@ -193,7 +210,7 @@ bash scripts/deploy-to-dsh.sh                # 铺到共享活副本（patch 层
 
 ## 发布
 
-顺序有硬依赖：**20 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败；
+顺序有硬依赖：**22 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败；
 其中 `dsh-sandbox-whitelist` 必须先于 `dsh-fs-whitelist`（后者依赖前者的 `./roots` subpath），
 `dsh-path-rules` 必须先于 `dsh-write-guard`（依赖它的 subpath exports）与运行时 bundle；
 两个 provider 是运行时 bundle 第 7/8 行的依赖，也须在 bundle 之前发）。
