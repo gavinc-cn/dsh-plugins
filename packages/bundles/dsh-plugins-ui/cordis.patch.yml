@@ -1,19 +1,20 @@
 # @gavinc-cn/dsh-plugins-ui —— 「UI 组件」的组合行（2026-10-13 从 @gavinc-cn/dsh-plugins 拆出）。
 #
 # 归属判据（2026-10-15 修订）：**面向 Web GUI 的组件归本包** —— 用户视角，装 UI 包就是为了改
-# GUI 观感。其中 6 个声明 `dsh.client.platform: "web"`：浏览器半边经 exports["./client"] 指向
+# GUI 观感。其中 7 个声明 `dsh.client.platform: "web"`：浏览器半边经 exports["./client"] 指向
 # lib/client.bundle.js；`dsh-feishu`（2026-10-29 新增）的宿主半边负责飞书桥接，浏览器半边提供
 # 扫码/绑定/连接面板，仍按「面向 GUI」归本包。
-# 另 1 个 `dsh-patch-ask-expand` 的运行体在宿主侧（没有 `dsh.client`，启动时对官方 client bundle
-# 打幂等文本补丁），但它的效果完全是 GUI 观感（提问行默认展开）⇒ 同样归本包，否则「只想装 UI 包」
-# 的人发现不了它。修订缘由与取舍见 `doc_ai/plan/202610/20261015_0546_ask-expand-to-ui-bundle.md`。
+# 另 2 个 `dsh-patch-*` 的运行体在宿主侧（没有 `dsh.client`，启动时对官方 client bundle 打幂等
+# 文本补丁：问答行默认展开、未发送会话保留在侧栏），但效果完全是 GUI 观感 ⇒ 同样归本包，
+# 否则「只想装 UI 包」的人发现不了它们。修订缘由与取舍见
+# `doc_ai/plan/202610/20261015_0546_ask-expand-to-ui-bundle.md`。
 # 其余宿主侧组件（记忆/守卫/沙箱白名单等）在 @gavinc-cn/dsh-plugins-runtime 里。
 # 源码树分组（packages/ui|runtime）跟着这个判据走：`packages/ui/` 下的包都在本 bundle 里，
 # 唯一例外是不随任何 bundle 下发的 `kanban-board`（见下）。
 #
 # 2026-10-15：**`kanban-board` 已从本包移除**（行与 dependencies 一并删除）。组件包本体仍留在
 # 仓库 `packages/ui/kanban-board/`（npm 上的 0.1.3 也还在，2026-10-24 实测 latest），只是**不再随任何 bundle 下发**：
-# 本包因此是 7 个组件（6 个带 dsh.client + dsh-patch-ask-expand）。要在某个 profile 重新挂它，就在该 profile 的
+# 本包因此是 10 个组件（7 个带 dsh.client + 3 个 dsh-patch-*）。要在某个 profile 重新挂它，就在该 profile 的
 # cordis.patch.yml 里手写一条 insert（`- insert: - id: kanban-board` + name `@gavinc-cn/kanban-board`）——
 # 注意手写 insert 在 Plugins 面板里没有行、也没有开关（面板只渲染 bundle 包自带 patch 的行），
 # 且行 id 在整棵组合树里只能出现一次（见下）。
@@ -33,8 +34,8 @@
 #
 # 机器相关配置（本机检出路径、状态目录、日志路径）**不进本文件**：写在各 profile 的覆盖行里。
 #
-# 依赖：本包在 package.json 的 dependencies 里声明下述 7 个组件包 —— 装本包即把它们一并装上，
-# 各 profile 因此能按包名解析到每一行。发布顺序：**7 个组件包先发，本包最后发**。
+# 依赖：本包在 package.json 的 dependencies 里声明下述 10 个组件包 —— 装本包即把它们一并装上，
+# 各 profile 因此能按包名解析到每一行。发布顺序：**10 个组件包先发，本包最后发**。
 #
 # 改组件集合 = 改本文件 + package.json dependencies + 组件包；已有行的客户端内容可热替换，
 # **新增/删除行仍需重启宿主**。改完把仓库真源铺到共享活副本
@@ -76,8 +77,23 @@
       name: "@gavinc-cn/dsh-feishu"
 
 # dsh-patch-ask-expand（2026-10-15 从 runtime bundle 移入）：启动时对官方 dsh-client-ui-tool 的
-# client bundle 打幂等文本补丁，让「提问 / 回答」那一行默认展开。**它是唯一直接改写官方包文件的
-# 行**：会写官方包的源文件（保留 .orig 备份），失败只记日志、不影响 dsh 启动。
+# client bundle 打幂等文本补丁，让「提问 / 回答」那一行默认展开。**它是本 bundle 里三个直接改写
+# 官方包文件的行之一**：会写官方包的源文件（保留 .orig 备份），失败只记日志、不影响 dsh 启动。
 - insert:
     - id: dsh-patch-ask-expand
       name: "@gavinc-cn/dsh-patch-ask-expand"
+
+# dsh-patch-unsent-session（2026-11-18）：启动时对官方 dsh-client-ui-workspace 的 client bundle
+# 打幂等文本补丁，让「写过草稿但还没发送」的 blank 会话继续留在侧栏，并用草稿首行做标题。
+# 与上一行同样的机制与边界：写官方包源文件（保留 .orig 备份），失败只记日志。
+- insert:
+    - id: dsh-patch-unsent-session
+      name: "@gavinc-cn/dsh-patch-unsent-session"
+
+# dsh-patch-draft-attachment（2026-11-18）：启动时对官方 dsh-client-ui-conversation 的 client bundle
+# 打幂等文本补丁，让 composer 草稿里的截图/图片/文件在切换会话、刷新页面后还能被还原（附件字节
+# 额外落 localStorage 索引 + IndexedDB）。与上两行同样的机制与边界：写官方包源文件（保留 .orig
+# 备份），失败只记日志。侧栏的「未发送会话」行读同一份附件索引，因此纯图片草稿也有入口。
+- insert:
+    - id: dsh-patch-draft-attachment
+      name: "@gavinc-cn/dsh-patch-draft-attachment"
