@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "未发送会话保留在侧栏",
+    "description": "让写过草稿但还没发送的新会话继续留在侧栏，并用草稿首行做标题：启动时对 dsh-client-ui-workspace 的 client bundle 打一个幂等文本补丁。"
+  }
+}

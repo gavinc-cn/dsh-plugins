@@ -1,0 +1,36 @@
+{
+  "name": "@gavinc-cn/dsh-patch-unsent-session",
+  "description": "让侧栏继续显示写过草稿但未发送的新会话（blank），并用草稿首行做标题：启动时对 dsh-client-ui-workspace 的 client bundle 打一个幂等文本补丁。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.mjs"
+    },
+    "./patch": {
+      "default": "./lib/patch.mjs"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "scripts": {
+    "test": "node --test test/patch.spec.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/ui/dsh-patch-unsent-session"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/ui/dsh-patch-unsent-session#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

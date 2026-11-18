@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Keep unsent sessions in the sidebar",
+    "description": "Keep draft-bearing but unsent new sessions visible in the sidebar, titled by the first line of their draft: an idempotent text patch applied to the dsh-client-ui-workspace client bundle at startup."
+  }
+}
