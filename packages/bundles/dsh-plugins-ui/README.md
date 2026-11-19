@@ -39,7 +39,8 @@
 ## 安装
 
 ```bash
-# 装进某个 profile（pnpm 会把依赖里的 10 个组件包一并装上）
+# 装进某个 profile（pnpm 会把 optionalDependencies 里的 10 个组件包一并装上；
+# 镜像缺个别包时只跳过那一个，见下一节）
 dsh plugin --profile web add @gavinc-cn/dsh-plugins-ui
 ```
 
@@ -49,6 +50,22 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-ui
   后者决定面板里卡片是否显示（客户端按 `installed` 过滤，只看 `dependencies`）。
 - 改了 `dsh.profile.bundles` 要**重启宿主**才生效（启动时读）；profile patch 层是 live 热重载，
   行级开关不需要重启。
+
+### 组件依赖是可选的（2026-11-19 起，缺包不阻塞整包）
+
+10 个组件包写在 `optionalDependencies` 里：镜像缺某个组件时，pnpm 只跳过那一个，其余组件和
+bundle 本体照常安装（pnpm 12.4.1 实测）。bundle 仍会进入 `dsh.profile.bundles`；缺失组件的行仍留在
+组合树里，宿主启动时只打一条 warning（非 required 行不阻断启动）：
+
+```text
+dsh: warning: 1 entry did not activate
+dsh-dim-text (@gavinc-cn/dsh-dim-text): failed to import: ... ERR_MODULE_NOT_FOUND
+```
+
+面板里该行显示为 failed，其他行不受影响。**装成功 ≠ 10 个组件都在**：缺失的包补装后重启宿主
+（重跑 `dsh plugin --profile <p> install`，或镜像恢复后重装本包）即可恢复。若手里已有缺失包的
+tgz，也可以在 profile 的 `pnpm-workspace.yaml` 用 `file:` overrides 补上，保留完整 10 个组件；
+镜像恢复本身仍按发布 spec 逐包核对。
 
 ## 组件（10 个）
 
@@ -104,6 +121,8 @@ patch 里 insert 的行）；② 同一个行 id 在整棵组合树里只能出�
 - 面板里组件的标题/说明来自各组件包自己的 `locale/*.json`；本包的 `locale/*.json` 只提供卡片
   标题与描述。`pluginPackages.metaOf()` 每次列举都实时读盘（2026-10-15 实测）⇒ 改 `locale`
   刷新面板即可，不必重启宿主（旧版「启动时缓存」的说法已证伪）。
+- 组件依赖是 `optionalDependencies`（2026-11-19 起）：缺包时 pnpm 通常**不打印明确的警告**，
+  只能从启动 warning 或面板 failed 行发现；若某组件行一直 failed，先查它的包是否真的装上。
 - 卡片描述里的组件数是写死的文案（`locale/*.json`），加组件/减组件时要一起改（`kanban-board`
   移出、`dsh-patch-ask-expand` 移入、2026-11-18 追加两个 `dsh-patch-*` 时都已同步；当前是
   **10 个 = 7 个带 `dsh.client` + 3 个 `dsh-patch-*`**）。

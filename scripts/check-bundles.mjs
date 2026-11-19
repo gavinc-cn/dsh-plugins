@@ -4,8 +4,8 @@
 // 为什么需要它：DSH 的行 id 在**整棵组合树里必须唯一** —— 同一个 id 出现两次，
 // dsh-plugin-manager 的 listPlugins() 会把该行判成 `unaddressable`（面板里既没有开关也拨不动，
 // 而且不报错）。拆分/搬家 bundle 行时最容易犯的两个错是：① 一行被两个 bundle 同时 insert；
-// ② 行写进了 patch 却没写进该 bundle 的 dependencies（别人装不上）。本脚本把这两类结构错误
-// 拦在部署/发布之前。
+// ② 行写进了 patch 却没写进该 bundle 的 optionalDependencies（缺包时无法跳过、也不可装）。
+// 本脚本把这两类结构错误拦在部署/发布之前。
 //
 // 用法: node scripts/check-bundles.mjs
 // 退出码: 0 = 全部通过; 1 = 有问题（逐条打印）。
@@ -14,7 +14,8 @@
 //   1. 目录名 = 包名去掉 scope（deploy 脚本按这条规则决定落地目录，错了会铺错地方）；
 //   2. 每个 bundle 包的 `dsh.bundle.patch` 指向的文件存在，且能解析出组件行；
 //   3. 行 id 全局唯一，且行 id = 行 name 去掉 scope；
-//   4. 每个 bundle 的 dependencies 集合 == 它的行 name 集合；
+//   4. 每个 bundle 的 optionalDependencies 集合 == 它的行 name 集合（组件依赖一律可选：镜像缺某包时
+//      pnpm 跳过该组件、其余照常安装；缺失行启动时只 warning，不阻断宿主）；
 //   5. 每个组件包（ui/ 与 runtime/ 下的包）恰好被一个 bundle 行引用 —— 除非它被显式登记进
 //      下面的 UNBUNDLED（「故意不随任何 bundle 下发」的包）；
 //   6. 源码树分组 = bundle 归属（packages/ui/* → dsh-plugins-ui，packages/runtime/* →
@@ -168,7 +169,8 @@ for (const bundle of bundles) {
     continue
   }
   const rows = parseInsertRows(text, `${rel}/${patchRel}`)
-  const deps = new Set(Object.keys(bundle.manifest.dependencies ?? {}))
+  const requiredDeps = new Set(Object.keys(bundle.manifest.dependencies ?? {}))
+  const optionalDeps = new Set(Object.keys(bundle.manifest.optionalDependencies ?? {}))
   const rowNames = new Set()
 
   for (const row of rows) {
@@ -179,13 +181,16 @@ for (const bundle of bundles) {
     if (slug(row.name) !== row.id) fail(`${rel}/${patchRel}:${row.line}: 行 id ${row.id} ≠ 包名短名 ${slug(row.name)}`)
     if (rowOwner.has(row.id)) fail(`行 id 重复: ${row.id}（${rowOwner.get(row.id)} 与 ${rel}）`)
     else rowOwner.set(row.id, rel)
-    if (!deps.has(row.name)) fail(`${rel}: 行 ${row.id} 的包 ${row.name} 不在 dependencies 里`)
+    if (requiredDeps.has(row.name)) {
+      fail(`${rel}: 行 ${row.id} 的包 ${row.name} 写在 dependencies 里；组件依赖必须写 optionalDependencies（镜像缺包时才可跳过）`)
+    }
+    if (!optionalDeps.has(row.name)) fail(`${rel}: 行 ${row.id} 的包 ${row.name} 不在 optionalDependencies 里`)
     if (!componentNames.has(row.name)) fail(`${rel}: 行 ${row.id} 的包 ${row.name} 在 packages/{ui,runtime}/ 里找不到`)
     else bundleOf.set(row.id, name)
     rowNames.add(row.name)
   }
 
-  for (const dep of deps) if (!rowNames.has(dep)) fail(`${rel}: dependencies 里的 ${dep} 没有对应的组件行`)
+  for (const dep of optionalDeps) if (!rowNames.has(dep)) fail(`${rel}: optionalDependencies 里的 ${dep} 没有对应的组件行`)
 
   const off = rows.filter((row) => row.disabled === true).length
   console.log(`-- ${name}: ${rows.length} 行（默认停用 ${off} 个）`)

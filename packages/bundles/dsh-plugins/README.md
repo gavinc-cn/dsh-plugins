@@ -32,6 +32,9 @@
 
 ## 安装
 
+两个 bundle 的组件依赖都是 `optionalDependencies`（2026-11-19 起）：镜像缺个别组件时
+pnpm 只跳过该组件，其余照常安装；缺失行启动时只 warning、面板显示 failed，不阻断宿主。
+
 ```bash
 # 想一次拿到两个 bundle 带来的 18 个组件的依赖（但仍要分别选 bundle）
 pnpm add @gavinc-cn/dsh-plugins

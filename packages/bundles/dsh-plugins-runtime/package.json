@@ -1,6 +1,6 @@
 {
   "name": "@gavinc-cn/dsh-plugins-runtime",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "DSH 插件组合包（runtime bundle）：8 个宿主（node）侧组件（记忆、git/文件守卫、路径规则闸门、写入守卫、多根沙箱/文件白名单 provider、重开会话再注入等），每个是一行独立开关；面向 Web GUI 的组件见 @gavinc-cn/dsh-plugins-ui。",
   "license": "MIT",
   "repository": {
@@ -41,7 +41,7 @@
     "registry": "https://registry.npmjs.org",
     "access": "public"
   },
-  "dependencies": {
+  "optionalDependencies": {
     "@gavinc-cn/dsh-superpowers-priming": "^0.1.0",
     "@gavinc-cn/dsh-memory": "^0.1.0",
     "@gavinc-cn/dsh-git-guard": "^0.1.0",
