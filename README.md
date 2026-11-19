@@ -21,6 +21,12 @@
 | 只要 UI 那 10 个 | `@gavinc-cn/dsh-plugins-ui` | 11 个包：10 个面向 Web GUI 的组件 + bundle |
 | 只要运行时那 8 个 | `@gavinc-cn/dsh-plugins-runtime` | 9 个包：8 个宿主侧组件 + bundle |
 
+> **版本说明（2026-11-20，第 12 轮）**：两个 bundle 的组件依赖从 `dependencies` 改为
+> `optionalDependencies`（`dsh-plugins-ui@0.1.7` / `dsh-plugins-runtime@0.1.13`；聚合元包
+> `dsh-plugins@0.2.7`）：镜像缺某个组件时 pnpm 只跳过那一个，bundle 本体与其余组件照常安装。
+> 代价是「装成功 ≠ 组件都在」—— 缺失行启动时只 warning、面板显示 failed，补装缺失包并重启宿主
+> 即可恢复。`scripts/check-bundles.mjs` 的判据同步改为 `optionalDependencies`。
+>
 > **版本说明（2026-11-18，第 11 轮）**：① 新增组件包 `dsh-patch-unsent-session@0.1.0` —— 让侧栏继续
 > 显示「写过草稿但还没发送」的 blank 会话，行标题取草稿首个非空行：宿主侧启动时对官方
 > `dsh-client-ui-workspace` 的 client bundle 打两处幂等文本补丁（`sessionVisible()`、
@@ -181,7 +187,7 @@ packages/
   bundles/     dsh-plugins-ui（UI 10 行）/ dsh-plugins-runtime（运行时 8 行）/ dsh-plugins（聚合元包）
 scripts/
   deploy-to-dsh.sh     把仓库铺到 dsh 实际加载的「共享活副本」~/.dsh/profiles/node_modules/@gavinc-cn/
-  check-bundles.mjs    结构校验：行 id 全局唯一、行 ∈ dependencies、目录名 = 包名短名
+  check-bundles.mjs    结构校验：行 id 全局唯一、行 ∈ optionalDependencies、目录名 = 包名短名
 ```
 
 ## 本地开发
@@ -203,7 +209,7 @@ bash scripts/deploy-to-dsh.sh                # 铺到共享活副本（patch 层
    配置层加载，后者决定面板里卡片是否显示（客户端按 `installed` 过滤，只看 `dependencies`）。
 3. **`disabled` 的极性与直觉相反**：`disabled: true` = 停用，`disabled: false` = 启用。
 4. **包间依赖写普通 semver**（如 `^0.1.0`），不要用 `workspace:` 协议。
-5. **不要在 profile 目录里跑 `pnpm install`**：bundle 的 `dependencies` 会把组件包下载成 profile
+5. **不要在 profile 目录里跑 `pnpm install`**：bundle 的组件依赖（`optionalDependencies`）会把组件包下载成 profile
    自己的副本（`<profile>/node_modules/@gavinc-cn/*`），按 Node 解析顺序盖住共享活副本里你改的那份源码。
 6. 面板上组件行的标题/说明来自**组件包自己**的 `locale/*.json`，卡片标题/描述来自 **bundle 包**的
    `locale/*.json`；宿主每次列举都实时读盘（2026-10-15 实测）⇒ 改 `locale` 后刷新面板即可。
@@ -221,7 +227,7 @@ npm publish <tarball> --registry=https://registry.npmjs.org --access public
 
 包内 `publishConfig` 已固化 registry 与 `access: public`；包之间的依赖一律写普通 semver
 （`workspace:` 协议只在 pnpm 下会被改写，npm 解析不了）。发布前先跑 `node scripts/check-bundles.mjs`，
-确认行 id 全局唯一、每行都写进了对应 bundle 的 `dependencies`。
+确认行 id 全局唯一、每行都写进了对应 bundle 的 `optionalDependencies`。
 
 ## 相关文档
 
