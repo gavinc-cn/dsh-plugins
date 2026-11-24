@@ -470,7 +470,9 @@ window.__ModuleLoader__.load({
         alignItems: 'center',
         justifyContent: wide ? 'flex-start' : 'center',
         gap: 6,
-        width: '100%',
+        // 底部动作与其他插件并排，按内容收缩，避免吃掉相邻动作的可用宽度。
+        width: 'fit-content',
+        maxWidth: '100%',
         boxSizing: 'border-box',
         padding: wide ? '6px 12px' : '6px 0',
         margin: '2px 0',
