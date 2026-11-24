@@ -22,6 +22,7 @@
 | `dsh-dim-text` / `dsh-session-unread-persist` / `dsh-turn-labels` / `dsh-sidebar-width-persist` / `dsh-prompt-recall` | 纯浏览器组件：`exports["./client"]` 指向 `lib/client.bundle.js`，node 半边是空 `apply()` |
 | `dsh-feishu` | **Host + client 同包**（2026-10-29 新增）：宿主半边负责飞书扫码/绑定/收发出站/提问审批，浏览器半边提供侧栏面板；因「面向 GUI」归本包 |
 | `dsh-session-live-metrics` | **Host projection + client 胶囊**（2026-10-30 新增）：宿主累计逐请求 DeepSeek token 费用和最近 5 分钟 decode 样本，浏览器在状态栏显示近 1 分钟速度与 session 费用估算 |
+| `dsh-deepseek-account` | **Host routes + client 胶囊**（2026-11-23 新增）：宿主查询官方余额并增量聚合全部会话的北京时间当日 token 费用，浏览器只读脱敏状态 |
 | `dsh-patch-ask-expand` | **运行体在宿主侧**（没有 `dsh.client`）：启动时对官方 `dsh-client-ui-tool` 的 client bundle 打幂等文本补丁；效果完全是 GUI 观感（提问行默认展开） |
 | `dsh-patch-unsent-session` | **运行体在宿主侧**（2026-11-18 新增）：对官方 `dsh-client-ui-workspace` 打幂等文本补丁，让写过草稿的 blank 会话留在侧栏、标题取草稿首行 |
 | `dsh-patch-draft-attachment` | **运行体在宿主侧**（2026-11-18 新增）：对官方 `dsh-client-ui-conversation` 打幂等文本补丁，让草稿里的附件跨会话/刷新保留（localStorage 索引 + IndexedDB） |
@@ -29,17 +30,17 @@
 修订缘由：按旧判据它属运行时包，但「只想装 UI 包」的人就永远发现不了它。判据因此从
 「代码跑在哪」改成「面向谁」。其余宿主侧组件（记忆/守卫/沙箱等）仍在
 [@gavinc-cn/dsh-plugins-runtime](../dsh-plugins-runtime/README.md)。
-两个包的行合起来 = **18 个组件** = 本包 10 + 运行时 bundle 8。`kanban-board`、
+两个包的行合起来 = **19 个组件** = 本包 11 + 运行时 bundle 8。`kanban-board`、
 `sandbox-path-allowlist`、`dsh-readonly-guard` 与 2026-11-01 迁入 `@gavinc-cn/touchstone-dsh`
 的 `dsh-autocommit` 不随本包下发；本包第 5 行是
-2026-10-30 新增的 `dsh-session-live-metrics`，第 6 行是 2026-10-29 的 `dsh-prompt-recall`，
-第 7 行是同日的 `dsh-feishu`；末三行（8–10）是三个 `dsh-patch-*` 宿主侧补丁，最后两个
+2026-10-30 新增的 `dsh-session-live-metrics`，第 6 行是 2026-11-23 的 `dsh-deepseek-account`，
+第 7/8 行是 `dsh-prompt-recall` / `dsh-feishu`；末三行（9–11）是三个 `dsh-patch-*` 宿主侧补丁，最后两个
 `dsh-patch-unsent-session` / `dsh-patch-draft-attachment` 于 2026-11-18 追加。
 
 ## 安装
 
 ```bash
-# 装进某个 profile（pnpm 会把 optionalDependencies 里的 10 个组件包一并装上；
+# 装进某个 profile（pnpm 会把 optionalDependencies 里的 11 个组件包一并装上；
 # 镜像缺个别包时只跳过那一个，见下一节）
 dsh plugin --profile web add @gavinc-cn/dsh-plugins-ui
 ```
@@ -53,7 +54,7 @@ dsh plugin --profile web add @gavinc-cn/dsh-plugins-ui
 
 ### 组件依赖是可选的（2026-11-19 起，缺包不阻塞整包）
 
-10 个组件包写在 `optionalDependencies` 里：镜像缺某个组件时，pnpm 只跳过那一个，其余组件和
+11 个组件包写在 `optionalDependencies` 里：镜像缺某个组件时，pnpm 只跳过那一个，其余组件和
 bundle 本体照常安装（pnpm 12.4.1 实测）。bundle 仍会进入 `dsh.profile.bundles`；缺失组件的行仍留在
 组合树里，宿主启动时只打一条 warning（非 required 行不阻断启动）：
 
@@ -62,12 +63,12 @@ dsh: warning: 1 entry did not activate
 dsh-dim-text (@gavinc-cn/dsh-dim-text): failed to import: ... ERR_MODULE_NOT_FOUND
 ```
 
-面板里该行显示为 failed，其他行不受影响。**装成功 ≠ 10 个组件都在**：缺失的包补装后重启宿主
+面板里该行显示为 failed，其他行不受影响。**装成功 ≠ 11 个组件都在**：缺失的包补装后重启宿主
 （重跑 `dsh plugin --profile <p> install`，或镜像恢复后重装本包）即可恢复。若手里已有缺失包的
-tgz，也可以在 profile 的 `pnpm-workspace.yaml` 用 `file:` overrides 补上，保留完整 10 个组件；
+tgz，也可以在 profile 的 `pnpm-workspace.yaml` 用 `file:` overrides 补上，保留完整 11 个组件；
 镜像恢复本身仍按发布 spec 逐包核对。
 
-## 组件（10 个）
+## 组件（11 个）
 
 | 行 id | 包 | 做什么 |
 |---|---|---|
@@ -76,6 +77,7 @@ tgz，也可以在 profile 的 `pnpm-workspace.yaml` 用 `file:` overrides 补�
 | `dsh-turn-labels` | `@gavinc-cn/dsh-turn-labels` | 右侧轮次刻度轨换成常驻文字（每轮一行显示该轮提问；提问条目直接显示用户回答——蓝色区分、hover 出完整问答，读不到回答时退回原版小横杠） |
 | `dsh-sidebar-width-persist` | `@gavinc-cn/dsh-sidebar-width-persist` | 左侧边栏拖动宽度持久化 |
 | `dsh-session-live-metrics` | `@gavinc-cn/dsh-session-live-metrics` | 状态栏新增近 1 分钟 decode 加权速度与当前主 session 的 DeepSeek 模型 token 费用估算；含宿主 projection，新增后需重启 |
+| `dsh-deepseek-account` | `@gavinc-cn/dsh-deepseek-account` | 状态栏显示 DeepSeek 官方 API 余额与本机全部会话的北京时间当日 token 费用估算；宿主持有凭据、查询与用量索引，新增后需重启 |
 | `dsh-prompt-recall` | `@gavinc-cn/dsh-prompt-recall` | 当前会话空输入框按 `ArrowUp` 召回上一条真人提问的完整文本；召回后按 `ArrowDown` 恢复原草稿。不自动发送 |
 | `dsh-feishu` | `@gavinc-cn/dsh-feishu` | 飞书私聊桥：扫码配置应用、一次性绑定码绑定 open_id、文本/图片/文件入站、答复与云文档出站、飞书内提问/审批双通道；仅私聊且仅插件自建会话 |
 | `dsh-patch-ask-expand` | `@gavinc-cn/dsh-patch-ask-expand` | 「提问 / 回答」那一行默认展开。宿主侧实现：启动时写官方 `@deepseek-ai/dsh-client-ui-tool` 的 `lib/client.js`（保留 `.orig` 备份；锚点对不上就跳过，只记日志） |
@@ -125,9 +127,9 @@ patch 里 insert 的行）；② 同一个行 id 在整棵组合树里只能出�
   只能从启动 warning 或面板 failed 行发现；若某组件行一直 failed，先查它的包是否真的装上。
 - 卡片描述里的组件数是写死的文案（`locale/*.json`），加组件/减组件时要一起改（`kanban-board`
   移出、`dsh-patch-ask-expand` 移入、2026-11-18 追加两个 `dsh-patch-*` 时都已同步；当前是
-  **10 个 = 7 个带 `dsh.client` + 3 个 `dsh-patch-*`**）。
+  **11 个 = 8 个带 `dsh.client` + 3 个 `dsh-patch-*`**）。
 - 本包因此**不是纯浏览器组件集合**：`dsh-feishu` 的宿主半边会在 DSH 进程内连接飞书并持有
-  WS/定时器；`dsh-session-live-metrics` 在宿主注册 projection；三个 `dsh-patch-*`
+  WS/定时器；`dsh-session-live-metrics` 在宿主注册 projection；`dsh-deepseek-account` 持有余额查询与跨会话用量索引；三个 `dsh-patch-*`
   会在宿主启动时写官方 npm 包的安装目录
   （`<dsh home>/profiles/node_modules/@deepseek-ai/dsh-client-ui-{tool,workspace,conversation}/lib/client.js`）。
   它们幂等、失败只记日志（`~/.kimi-code/hooks/logs/patch_{ask_expand,unsent_session,draft_attachment}.log`），

@@ -1,5 +1,5 @@
 {
   "meta": {
-    "description": "Ten Web-GUI-facing components: dimmed text, session unread dots, turn labels, sidebar width persistence, 1-minute speed and cost, previous-prompt recall, the Feishu bridge (QR provisioning, binding, private chat, cloud docs, questions and approvals), expanded ask rows, unsent sessions kept in the sidebar, and composer draft attachments (screenshots / images / files) kept across session switches and reloads (the last three are patched host-side). Each row is a separate switch."
+    "description": "Eleven Web-GUI-facing components: dimmed text, session unread dots, turn labels, sidebar width persistence, 1-minute speed and cost, DeepSeek balance and daily cost, previous-prompt recall, the Feishu bridge (QR provisioning, binding, private chat, cloud docs, questions and approvals), expanded ask rows, unsent sessions kept in the sidebar, and composer draft attachments (screenshots / images / files) kept across session switches and reloads (the last three are patched host-side). Each row is a separate switch."
   }
 }

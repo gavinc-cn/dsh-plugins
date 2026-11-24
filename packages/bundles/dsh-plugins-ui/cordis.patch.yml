@@ -14,7 +14,7 @@
 #
 # 2026-10-15：**`kanban-board` 已从本包移除**（行与 dependencies 一并删除）。组件包本体仍留在
 # 仓库 `packages/ui/kanban-board/`（npm 上的 0.1.3 也还在，2026-10-24 实测 latest），只是**不再随任何 bundle 下发**：
-# 本包因此是 10 个组件（7 个带 dsh.client + 3 个 dsh-patch-*）。要在某个 profile 重新挂它，就在该 profile 的
+# 本包因此是 11 个组件（8 个带 dsh.client + 3 个 dsh-patch-*）。要在某个 profile 重新挂它，就在该 profile 的
 # cordis.patch.yml 里手写一条 insert（`- insert: - id: kanban-board` + name `@gavinc-cn/kanban-board`）——
 # 注意手写 insert 在 Plugins 面板里没有行、也没有开关（面板只渲染 bundle 包自带 patch 的行），
 # 且行 id 在整棵组合树里只能出现一次（见下）。
@@ -34,9 +34,9 @@
 #
 # 机器相关配置（本机检出路径、状态目录、日志路径）**不进本文件**：写在各 profile 的覆盖行里。
 #
-# 依赖：本包在 package.json 的 optionalDependencies 里声明下述 10 个组件包（2026-11-19 起）——
+# 依赖：本包在 package.json 的 optionalDependencies 里声明下述 11 个组件包（2026-11-19 起）——
 # 装本包即把它们一并装上，各 profile 因此能按包名解析到每一行；镜像缺某个组件时 pnpm 只跳过它，
-# 其余照常安装，缺失行启动时只 warning（不阻断宿主）。发布顺序仍建议 **10 个组件包先发，本包最后发**，
+# 其余照常安装，缺失行启动时只 warning（不阻断宿主）。发布顺序仍建议 **11 个组件包先发，本包最后发**，
 # 否则先发的那一轮里对应组件会被跳过。
 #
 # 改组件集合 = 改本文件 + package.json dependencies + 组件包；已有行的客户端内容可热替换，
@@ -68,6 +68,12 @@
       name: "@gavinc-cn/dsh-session-live-metrics"
 
 # 纯浏览器组件：当前会话空输入框按 ArrowUp 召回上一条真人提问的完整文本。
+# DeepSeek 账户指标（2026-11-23）：宿主查询官方余额并聚合全部会话的北京时间当日费用；
+# 浏览器只在 composer.dock 展示脱敏状态，点击胶囊强制刷新。
+- insert:
+    - id: dsh-deepseek-account
+      name: "@gavinc-cn/dsh-deepseek-account"
+
 - insert:
     - id: dsh-prompt-recall
       name: "@gavinc-cn/dsh-prompt-recall"
