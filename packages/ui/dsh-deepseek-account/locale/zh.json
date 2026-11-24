@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DeepSeek 余额与今日消费",
+    "description": "在状态栏显示 DeepSeek 官方 API 余额，以及按本机全部 DSH 会话模型 token 用量、缓存命中与峰谷价格估算的北京时间当日消费；密钥仅留在宿主。"
+  }
+}

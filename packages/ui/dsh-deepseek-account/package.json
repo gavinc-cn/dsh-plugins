@@ -1,0 +1,53 @@
+{
+  "name": "@gavinc-cn/dsh-deepseek-account",
+  "description": "在 DSH 状态栏显示 DeepSeek 官方账户余额，以及按本机全部会话 token 用量与峰谷价格估算的北京时间当日消费。",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "files": [
+    "lib",
+    "locale"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "default": "./lib/client.bundle.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@gavinc-cn/dsh-session-live-metrics": "^0.1.0"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "deepseek",
+    "balance",
+    "usage",
+    "plugin"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gavinc-cn/dsh-plugins.git",
+    "directory": "packages/ui/dsh-deepseek-account"
+  },
+  "homepage": "https://github.com/gavinc-cn/dsh-plugins/tree/master/packages/ui/dsh-deepseek-account#readme",
+  "bugs": "https://github.com/gavinc-cn/dsh-plugins/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}

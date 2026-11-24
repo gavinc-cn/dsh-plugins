@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DeepSeek balance and daily cost",
+    "description": "Shows the official DeepSeek API balance and today’s Beijing-time model-token cost estimate across all local DSH sessions, including cache and peak/off-peak pricing. Credentials stay host-side."
+  }
+}
