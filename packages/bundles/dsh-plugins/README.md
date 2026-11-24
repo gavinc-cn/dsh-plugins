@@ -15,16 +15,17 @@
 2026-10-24 运行时 bundle 新增 `dsh-sandbox-whitelist` 与 `dsh-fs-whitelist`（两个 provider，均默认停用）、
 同日退役 `dsh-readonly-guard` ⇒ **14 行**（UI 5 + 运行时 9）；2026-10-29 UI 新增 `dsh-prompt-recall` ⇒ **15 行**（UI 6 + 运行时 9）；同日再加入 `dsh-feishu` ⇒ **16 行**（UI 7 + 运行时 9）；2026-10-30 加入 `dsh-session-live-metrics` ⇒ **17 行**（UI 8 + 运行时 9）；2026-11-01 运行时迁出
 `dsh-autocommit`（并入 `@gavinc-cn/touchstone-dsh`）⇒ **16 行**（UI 8 + 运行时 8）；2026-11-18 UI 新增
-`dsh-patch-unsent-session` 与 `dsh-patch-draft-attachment` ⇒ **18 行**（UI 10 + 运行时 8）。）
+`dsh-patch-unsent-session` 与 `dsh-patch-draft-attachment` ⇒ **18 行**（UI 10 + 运行时 8）；
+2026-11-23 UI 新增 `dsh-deepseek-account` ⇒ **19 行**（UI 11 + 运行时 8）。）
 
 ## 拆分后的两个 bundle
 
 | 包 | 组件数 | 判据 | 面板卡片 |
 |---|---|---|---|
-| [@gavinc-cn/dsh-plugins-ui](../dsh-plugins-ui/README.md) | 10 | **面向 Web GUI**：7 个声明 `dsh.client.platform: "web"` 的组件（5 个纯浏览器 + Host/client 同包的 `dsh-feishu`、`dsh-session-live-metrics`）+ 3 个 `dsh-patch-*`（宿主侧启动时给官方 client bundle 打补丁：问答行默认展开、未发送会话保留在侧栏、草稿附件保留，效果也是 GUI 观感） | 标题 = 包名 `@gavinc-cn/dsh-plugins-ui` |
+| [@gavinc-cn/dsh-plugins-ui](../dsh-plugins-ui/README.md) | 11 | **面向 Web GUI**：8 个声明 `dsh.client.platform: "web"` 的组件（5 个纯浏览器 + Host/client 同包的 `dsh-feishu`、`dsh-session-live-metrics`、`dsh-deepseek-account`）+ 3 个 `dsh-patch-*`（宿主侧启动时给官方 client bundle 打补丁：问答行默认展开、未发送会话保留在侧栏、草稿附件保留，效果也是 GUI 观感） | 标题 = 包名 `@gavinc-cn/dsh-plugins-ui` |
 | [@gavinc-cn/dsh-plugins-runtime](../dsh-plugins-runtime/README.md) | 8 | 宿主（node）侧的运行支撑组件（记忆/守卫/路径规则与写入闸门、多根沙箱与文件白名单 provider 等），没有 `dsh.client` | 标题 = 包名 `@gavinc-cn/dsh-plugins-runtime` |
 
-两个包合起来 = **18 行**；`kanban-board`、`sandbox-path-allowlist`（2026-10-17 由 `dsh-path-rules`
+两个包合起来 = **19 行**；`kanban-board`、`sandbox-path-allowlist`（2026-10-17 由 `dsh-path-rules`
 合并退役）、`dsh-readonly-guard`（2026-10-24 退役）与 `dsh-autocommit`（2026-11-01 迁入
 `@gavinc-cn/touchstone-dsh`）不随本包的任何 bundle 下发，仍留在仓库作回滚真源。
 既有行 id 与相对顺序都没变（新行只插在中间/末尾）⇒ 各 profile 的覆盖行原样继续命中
@@ -36,7 +37,7 @@
 pnpm 只跳过该组件，其余照常安装；缺失行启动时只 warning、面板显示 failed，不阻断宿主。
 
 ```bash
-# 想一次拿到两个 bundle 带来的 18 个组件的依赖（但仍要分别选 bundle）
+# 想一次拿到两个 bundle 带来的 19 个组件的依赖（但仍要分别选 bundle）
 pnpm add @gavinc-cn/dsh-plugins
 
 # 真正把它挂进某个 profile：分别装两个 bundle（dsh plugin 会把包名追加进 dsh.profile.bundles）
