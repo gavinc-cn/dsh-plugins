@@ -1,9 +1,11 @@
 # dsh-plugins —— @gavinc-cn 的 DSH 插件集
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**22 个组件包** +
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的自研插件：**23 个组件包** +
 **2 个 bundle** + **1 个聚合元包**。本仓库是这些插件源码的真源，npm 上的包由这里的
 `packages/<分组>/<包>/` 逐个发布。
 
+> 2026-11-23 新增 `dsh-deepseek-account@0.1.1`（DeepSeek 官方余额与本机全部会话的北京时间当日消费），
+> 接入 UI bundle；`dsh-feishu@0.1.1` 缩小侧栏入口占用宽度。本文顶部的包数已同步更新。
 > 2026-11-18 新增 `dsh-patch-unsent-session@0.1.0`（写过草稿的未发送会话保留在侧栏，标题取草稿首行）
 > 与 `dsh-patch-draft-attachment@0.1.0`（草稿里的截图/图片/文件跨会话与刷新保留）；两者接入 UI
 > bundle，后者升至 0.1.6、变为 10 行，两 bundle 合计 **18 行**。本文顶部的包数已同步更新。
@@ -17,10 +19,15 @@
 
 | 想要什么 | 装哪个 | 装完得到 |
 |---|---|---|
-| 全都要 | `@gavinc-cn/dsh-plugins` | 22 个包：18 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
-| 只要 UI 那 10 个 | `@gavinc-cn/dsh-plugins-ui` | 11 个包：10 个面向 Web GUI 的组件 + bundle |
+| 全都要 | `@gavinc-cn/dsh-plugins` | 22 个包：19 个组件 + 2 个 bundle + 元包自身（靠 `dependencies` 传递） |
+| 只要 UI 那 11 个 | `@gavinc-cn/dsh-plugins-ui` | 12 个包：11 个面向 Web GUI 的组件 + bundle |
 | 只要运行时那 8 个 | `@gavinc-cn/dsh-plugins-runtime` | 9 个包：8 个宿主侧组件 + bundle |
 
+> **版本说明（2026-11-24，第 13 轮）**：首发 `dsh-deepseek-account@0.1.1`，状态栏显示
+> DeepSeek 官方 API 余额与本机全部会话的北京时间当日 token 费用估算；启动只扫描当天候选会话，
+> 之后增量更新。`dsh-feishu@0.1.1` 将侧栏底部动作改为按内容收缩，避免挤占相邻动作；
+> `dsh-plugins-ui@0.1.8` 接入第 11 行；`dsh-plugins@0.2.8` 更新组件计数。
+>
 > **版本说明（2026-11-20，第 12 轮）**：两个 bundle 的组件依赖从 `dependencies` 改为
 > `optionalDependencies`（`dsh-plugins-ui@0.1.7` / `dsh-plugins-runtime@0.1.13`；聚合元包
 > `dsh-plugins@0.2.7`）：镜像缺某个组件时 pnpm 只跳过那一个，bundle 本体与其余组件照常安装。
@@ -113,7 +120,7 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 
 ## 包里有什么
 
-### `@gavinc-cn/dsh-plugins-ui`（10 个，面向 Web GUI）
+### `@gavinc-cn/dsh-plugins-ui`（11 个，面向 Web GUI）
 
 | 组件 | 说明 |
 |---|---|
@@ -122,6 +129,7 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 | `dsh-turn-labels` | 把右侧轮次刻度轨换成常驻文字：每轮一行显示提问，当前轮高亮，hover 预览，点击跳转；提问条目直接显示用户回答（蓝色区分、hover 出完整问答，读不到回答时退回原版小横杠） |
 | `dsh-sidebar-width-persist` | 左侧边栏拖动宽度持久化：刷新后仍是上次的宽度，收起再展开不丢 |
 | `dsh-session-live-metrics` | 状态栏显示最近 1 分钟 decode 加权输出速度，以及当前主 session 按 DeepSeek 实际模型、缓存桶与峰谷时段估算的 token 费用（不汇总子代理、不含 Search/Fetch）；含宿主 projection，新增后需重启 |
+| `dsh-deepseek-account` | 状态栏显示 DeepSeek 官方 API 余额与本机全部会话（含子代理）的北京时间当日 token 费用估算；启动只扫描当天候选会话，之后增量更新；含宿主 routes，新增后需重启 |
 | `dsh-prompt-recall` | 当前会话空输入框按 `ArrowUp` 召回上一条真人提问的完整文本；召回后按 `ArrowDown` 恢复原草稿。不自动发送 |
 | `dsh-feishu` | 飞书私聊桥（Host + client 同包）：面板扫码配置应用、一次性绑定码绑定 open_id、每用户独立 DSH 会话、文本/图片/文件入站、答复与云文档出站、飞书内提问/审批双通道；仅私聊且仅插件自建会话 |
 | `dsh-patch-ask-expand` | 让 `ask_user_question` 那一行默认展开。**宿主侧实现**：启动时对官方 client bundle 打幂等文本补丁（保留 `.orig` 备份，锚点对不上就跳过） |
@@ -179,12 +187,12 @@ npm i @gavinc-cn/dsh-plugins          # 或者 pnpm add
 
 ```
 packages/
-  ui/          11 个面向 Web GUI 的组件包（7 个声明 dsh.client.platform: "web"，其中 dsh-feishu 与
-              dsh-session-live-metrics 为 Host + client 同包；3 个 dsh-patch-* 宿主侧实现；
+  ui/          12 个面向 Web GUI 的组件包（8 个声明 dsh.client.platform: "web"，其中 dsh-feishu、
+              dsh-session-live-metrics 与 dsh-deepseek-account 为 Host + client 同包；3 个 dsh-patch-* 宿主侧实现；
               kanban-board 不随 bundle 下发）
   runtime/     11 个宿主（node）侧组件包（sandbox-path-allowlist、dsh-readonly-guard 与
                dsh-autocommit 不随本 bundle 下发）
-  bundles/     dsh-plugins-ui（UI 10 行）/ dsh-plugins-runtime（运行时 8 行）/ dsh-plugins（聚合元包）
+  bundles/     dsh-plugins-ui（UI 11 行）/ dsh-plugins-runtime（运行时 8 行）/ dsh-plugins（聚合元包）
 scripts/
   deploy-to-dsh.sh     把仓库铺到 dsh 实际加载的「共享活副本」~/.dsh/profiles/node_modules/@gavinc-cn/
   check-bundles.mjs    结构校验：行 id 全局唯一、行 ∈ optionalDependencies、目录名 = 包名短名
@@ -216,7 +224,7 @@ bash scripts/deploy-to-dsh.sh                # 铺到共享活副本（patch 层
 
 ## 发布
 
-顺序有硬依赖：**22 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败；
+顺序有硬依赖：**23 个组件包先发 → 两个 bundle → 聚合元包**（先发后面的会让别人 `pnpm add` 时解析失败；
 其中 `dsh-sandbox-whitelist` 必须先于 `dsh-fs-whitelist`（后者依赖前者的 `./roots` subpath），
 `dsh-path-rules` 必须先于 `dsh-write-guard`（依赖它的 subpath exports）与运行时 bundle；
 两个 provider 是运行时 bundle 第 7/8 行的依赖，也须在 bundle 之前发）。
