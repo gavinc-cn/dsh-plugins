@@ -1,7 +1,7 @@
 {
   "name": "@gavinc-cn/dsh-patch-ask-expand",
   "description": "让 Web GUI 里「提问 / 回答」这一行（ask_user_question）默认展开：启动时对 dsh-client-ui-tool 的 client bundle 打一个幂等文本补丁。",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "main": "lib/index.mjs",
   "files": [

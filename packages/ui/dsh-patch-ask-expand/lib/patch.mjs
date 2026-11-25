@@ -21,6 +21,17 @@
 // 通用工具行/推理行一行都不受影响；③ 用户在提问行上的第一次点击被解释为"我要收起"，
 // 之后这一行的展开态完全归用户（再点就是正常展开/收起）。
 //
+// 【第三版：0.2.2-rc.5 锚点重写（2026-11-25）】DSH 0.2.2-rc.5 的 bundle 换了构建产物形态：
+// 从「每行一条、\t 缩进、赋值号带空格、双引号」变成「整份压成一行、无空格、单引号与模板字符串」，
+// 于是原锚点自 2026-11-20 起全部 anchor-missing（日志 ~/.kimi-code/hooks/logs/patch_ask_expand.log），
+// 提问行又退回默认折叠，连带 dsh-turn-labels 的回答行退化成小横杠。现在的锚点是**当前 bundle
+// 的逐字节原文**（含反引号模板字符串），规则 id 与插入的补丁语义不变，只换文本形态。
+// ⚠ 每次 DSH 升级都要重新核对下面四条 find：命中数必须恰为 1，否则整体拒绝打补丁
+//   （绝不留半打状态）。核对方法是直接 grep 线上 bundle：
+//     const expandable=state!==`preparing`&&(inputRaw!==null||outputText!==null||card!==null);const open=expanded&&expandable;
+//     const expandable=bodyRaw!=null||output!=null||askQuestion!=null;const open=expanded&&expandable;
+//     onToggle:toggleExpand,   /   onToggle:toggle,
+//
 // ⚠ 历史教训（第一版补丁踩过的坑，务必不要回退）：
 //   上一版是在 `const expandable = ...` 之前插 useEffect，依赖数组 [expandable, toggle] 在
 //   "求实参"时就立即求值，落进该 const 的暂时性死区，实测每次渲染抛
@@ -34,59 +45,56 @@ export const BUNDLE_RELATIVE_PATH = 'lib/client.js'
 /** 补丁标记：幂等判定与"是否需要重打"都看它（只出现在本补丁插入的注释里）。 */
 export const MARKER = 'dsh-ask-expand'
 
-/** ToolRow 的锚点：算出 expandable / open 的那两行（含制表符缩进，与 bundle 文本逐字节一致）。 */
-const TOOLROW_ANCHOR = '\t\t\tconst expandable = state !== "preparing" && (inputRaw !== null || outputText !== null || card !== null);\n'
-  + '\t\t\tconst open = expanded && expandable;\n'
+/** ToolRow 的锚点：算出 expandable / open 的那两条语句（0.2.2-rc.5 压缩形态，逐字节一致）。 */
+const TOOLROW_ANCHOR = 'const expandable=state!==`preparing`&&(inputRaw!==null||outputText!==null||card!==null);const open=expanded&&expandable;'
 
-/** QuestionToolRow 的锚点：同样是 expandable / open 两行。 */
-const QUESTIONROW_ANCHOR = '\t\t\tconst expandable = bodyRaw != null || output != null || askQuestion != null;\n'
-  + '\t\t\tconst open = expanded && expandable;\n'
+/** QuestionToolRow 的锚点：同样是 expandable / open 两条语句。 */
+const QUESTIONROW_ANCHOR = 'const expandable=bodyRaw!=null||output!=null||askQuestion!=null;const open=expanded&&expandable;'
 
-/** ToolRow 里的插入片段：默认展开标记 + 一次性关闭标记。 */
-const TOOLROW_OPEN_LINES = '\t\t\t/* ' + MARKER + ': 提问行默认展开（askQuestionBody 只有提问行非空） */\n'
-  + '\t\t\tconst askDefaultOpen = askQuestionBody !== null;\n'
-  + '\t\t\tconst [askDismissed, setAskDismissed] = (0, react.useState)(false);\n'
+/** ToolRow 的插入片段：默认展开标记 + 一次性关闭标记（插在 expandable 之后、open 之前）。 */
+const TOOLROW_OPEN_REPLACE = 'const expandable=state!==`preparing`&&(inputRaw!==null||outputText!==null||card!==null);'
+  + '/* ' + MARKER + ': 提问行默认展开（askQuestionBody 只有提问行非空） */'
+  + 'const askDefaultOpen=askQuestionBody!==null;const[askDismissed,setAskDismissed]=(0,react.useState)(false);'
+  + 'const open=expandable&&(expanded||askDefaultOpen&&!askDismissed);'
 
-/** QuestionToolRow 里的插入片段：同上，判定换成 askQuestion。 */
-const QUESTIONROW_OPEN_LINES = '\t\t\t/* ' + MARKER + ': 提问行默认展开 */\n'
-  + '\t\t\tconst askDefaultOpen = askQuestion != null;\n'
-  + '\t\t\tconst [askDismissed, setAskDismissed] = (0, react.useState)(false);\n'
+/** QuestionToolRow 的插入片段：同上，判定换成 askQuestion。 */
+const QUESTIONROW_OPEN_REPLACE = 'const expandable=bodyRaw!=null||output!=null||askQuestion!=null;'
+  + '/* ' + MARKER + ': 提问行默认展开 */'
+  + 'const askDefaultOpen=askQuestion!=null;const[askDismissed,setAskDismissed]=(0,react.useState)(false);'
+  + 'const open=expandable&&(expanded||askDefaultOpen&&!askDismissed);'
 
 /**
  * 改写规则表：每条 find 必须在整份 bundle 里**唯一**，否则拒绝打补丁。
- * 注意 `const open = expanded && expandable;` 在 bundle 里出现 3 次（ToolRow、QuestionToolRow、
- * StartedBashRow），所以锚点必须带上上一行才能定位到具体组件。
+ * 注意 `onToggle:toggle,` 是 `onToggle:toggleExpand,` 的前缀，靠先整段替换顺序无关
+ * （替换后的文本里已不含 `onToggle:toggle,`），但**唯一性校验必须按原始文本**做，
+ * 见 applyPatch 里先校验全部规则再统一替换。
  */
 export const RULES = [
   {
     id: 'toolrow-open',
     find: TOOLROW_ANCHOR,
-    replace: '\t\t\tconst expandable = state !== "preparing" && (inputRaw !== null || outputText !== null || card !== null);\n'
-      + TOOLROW_OPEN_LINES
-      + '\t\t\tconst open = expandable && (expanded || askDefaultOpen && !askDismissed);\n',
+    replace: TOOLROW_OPEN_REPLACE,
   },
   {
     id: 'toolrow-toggle',
-    find: '\t\t\t\t\tonToggle: toggleExpand,\n',
-    replace: '\t\t\t\t\tonToggle: askDefaultOpen && !askDismissed ? () => setAskDismissed(true) : toggleExpand,\n',
+    find: 'onToggle:toggleExpand,',
+    replace: 'onToggle:askDefaultOpen&&!askDismissed?()=>setAskDismissed(true):toggleExpand,',
   },
   {
     id: 'questionrow-open',
     find: QUESTIONROW_ANCHOR,
-    replace: '\t\t\tconst expandable = bodyRaw != null || output != null || askQuestion != null;\n'
-      + QUESTIONROW_OPEN_LINES
-      + '\t\t\tconst open = expandable && (expanded || askDefaultOpen && !askDismissed);\n',
+    replace: QUESTIONROW_OPEN_REPLACE,
   },
   {
     id: 'questionrow-toggle',
-    find: '\t\t\t\t\tonToggle: toggle,\n',
-    replace: '\t\t\t\t\tonToggle: askDefaultOpen && !askDismissed ? () => setAskDismissed(true) : toggle,\n',
+    find: 'onToggle:toggle,',
+    replace: 'onToggle:askDefaultOpen&&!askDismissed?()=>setAskDismissed(true):toggle,',
   },
 ]
 
 /**
- * 上一版（已失效的）补丁片段：只插在 QuestionToolRow 里的自动展开 effect。
- * 新版不再需要它；applyPatch 会先把这段残留清掉再打新补丁。
+ * 上一版（在 0.2.1 及更早 bundle 上生效、已失效）的残留片段：只插在 QuestionToolRow 里的自动
+ * 展开 effect。新版不再需要它；applyPatch 会先把这段残留清掉再打新补丁。
  */
 export const LEGACY_EFFECT = '\t\t\t(0, react.useEffect)(() => {\n'
   + '\t\t\t\tif (!expandable) return;\n'
@@ -123,10 +131,10 @@ export function applyPatch(source) {
   for (const rule of RULES) {
     const hits = count(code, rule.find)
     if (hits === 0) {
-      return { code: legacyHits > 0 ? code : source, changed: legacyHits > 0, reason: `anchor-missing:${rule.id}`, applied: [] }
+      return { code: legacyHits > 0 ? code : source, changed: false, reason: `anchor-missing:${rule.id}`, applied: [] }
     }
     if (hits > 1) {
-      return { code: legacyHits > 0 ? code : source, changed: legacyHits > 0, reason: `anchor-ambiguous:${rule.id}`, applied: [] }
+      return { code: legacyHits > 0 ? code : source, changed: false, reason: `anchor-ambiguous:${rule.id}`, applied: [] }
     }
   }
   for (const rule of RULES) code = code.replace(rule.find, rule.replace)
