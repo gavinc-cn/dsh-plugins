@@ -557,6 +557,297 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * 解析工具结果里的「回答批」JSON(0.7.0)。
+		 *
+		 * 两种调用形态的回答都长这样(真机取证: 原生 tool/result 与 PTC tool/ptc-dispatch 的
+		 * content[0].text 完全同形):
+		 *   {"answers":[{"id":"rule","selected":["…"]},{"id":"other","custom":"…"}]}
+		 * selected 是勾选项, custom 是自定义输入; 两者可以同时出现。被中断/取消的提问结果
+		 * 是一句 Error 文本(不是 JSON), 解析失败即视为"没有回答"。
+		 * @param {string} text - 结果文本载荷。
+		 * @returns {{id: string, selected: string[], custom: string|null}[]} 认不出时返回空数组。
+		 */
+		function parseAnswerBatch(text) {
+			if (typeof text !== "string" || text === "") return [];
+			let parsed;
+			try {
+				parsed = JSON.parse(text);
+			} catch {
+				return [];
+			}
+			const answers = parsed === null || typeof parsed !== "object" ? null : parsed.answers;
+			if (!Array.isArray(answers)) return [];
+			return answers
+				.filter((answer) => answer !== null && typeof answer === "object")
+				.map((answer) => ({
+					id: typeof answer.id === "string" ? answer.id : "",
+					// 题型是多选时 selected 可能有多条; 值不是字符串的一律丢掉。
+					selected: Array.isArray(answer.selected)
+						? answer.selected.filter((label) => typeof label === "string" && label !== "")
+						: [],
+					custom: typeof answer.custom === "string" && answer.custom !== "" ? answer.custom : null,
+				}));
+		}
+
+		/**
+		 * 取工具结果 content 里的第一段文本(原生与 PTC 的 content 都是 [{type:"text",text}] 数组)。
+		 * @param {unknown} content - 工具结果 content。
+		 * @returns {string} 文本; 没有文本时返回空串。
+		 */
+		function contentText(content) {
+			if (typeof content === "string") return content;
+			if (!Array.isArray(content)) return "";
+			for (const part of content) {
+				if (part !== null && typeof part === "object" && typeof part.text === "string") return part.text;
+			}
+			return "";
+		}
+
+		/**
+		 * 把提问参数里的题目列表读成 {id, question}(原生是 JSON 字符串, PTC 是对象)。
+		 * @param {unknown} args - tool/call 或 ptc-dispatch-start 的 arguments。
+		 * @returns {{id: string, question: string}[]} 认不出时返回空数组。
+		 */
+		function questionsOfArguments(args) {
+			let value = args;
+			if (typeof args === "string") {
+				try {
+					value = JSON.parse(args);
+				} catch {
+					return [];
+				}
+			}
+			const questions = value === null || typeof value !== "object" ? null : value.questions;
+			if (!Array.isArray(questions)) return [];
+			return questions
+				.filter((question) => question !== null && typeof question === "object")
+				.map((question) => ({
+					id: typeof question.id === "string" ? question.id : "",
+					question: typeof question.question === "string" ? question.question : "",
+				}));
+		}
+
+		/**
+		 * 回答批 → rail 的 card 条目, 与 DOM 版同形(每个"答过的题"一条, 跳过题不产出)。
+		 * 多选与自定义输入的拼法与官方答案卡一致: 勾选项在前、自定义在后, 一行一个答案。
+		 * @param {{id: string, question: string}[]} questions - 题目。
+		 * @param {{id: string, selected: string[], custom: string|null}[]} answers - 回答批。
+		 * @returns {{question: string, answer: string}[]} card 条目。
+		 */
+		function answerCard(questions, answers) {
+			const out = [];
+			for (const answer of answers) {
+				const labels = answer.custom === null ? answer.selected : [...answer.selected, answer.custom];
+				const answerText = labels.join("、");
+				if (answerText === "") continue;
+				const question = questions.find((item) => item.id === answer.id);
+				out.push({ question: question === undefined ? "" : question.question, answer: answerText });
+			}
+			return out;
+		}
+
+		/**
+		 * 空的折叠状态(0.7.0)。
+		 *   turns: callId → 轮次(所有 tool/call 都记, PTC 子调用靠它反查父 run_code 的轮次);
+		 *   asks : callId → { callId, turn, questions, card }(只记 ask_user_question)。
+		 * @returns {{turns: Map<string, number>, asks: Map<string, object>}} 折叠状态。
+		 */
+		function createAskFold() {
+			return { turns: new Map(), asks: new Map() };
+		}
+
+		/**
+		 * 折叠一条会话事件(0.7.0)。
+		 *
+		 * 原生调用: tool/call(name=ask_user_question) 记题目与轮次, tool/result 记回答;
+		 * PTC 调用: tool/ptc-dispatch-start 记题目 + parentCallId, tool/ptc-dispatch 记回答 ——
+		 * 子调用事件**不带 turn/step**, 轮次只能由 parentCallId 反查父 run_code 的 tool/call。
+		 * 为什么不用 userQuestions 投影: 它只覆盖带 timeout 的 timed schema, 且 PTC 分支只把
+		 * 提问标成 continued、不落 settled(真机取证), 拿不到回答。
+		 * @param {object} state - createAskFold() 的状态。
+		 * @param {object} event - 一条 SessionEvent(或带 .event 的历史条目)。
+		 */
+		function foldAskEvent(state, event) {
+			const current = event !== null && typeof event === "object" && event.event !== undefined ? event.event : event;
+			if (current === null || current === undefined || typeof current !== "object") return;
+			const data = current.data;
+			if (data === null || data === undefined || typeof data !== "object") return;
+			if (current.type === "tool/call") {
+				const callId = String(data.callId);
+				const turn = Number(data.turn);
+				state.turns.set(callId, turn);
+				if (data.name === "ask_user_question") {
+					state.asks.set(callId, { callId, turn, questions: questionsOfArguments(data.arguments), card: [] });
+				}
+				return;
+			}
+			if (current.type === "tool/result") {
+				const message = data.message;
+				if (message === null || message === undefined || typeof message !== "object") return;
+				const callId = String(message.toolCallId ?? (message.source === undefined ? "" : message.source.callId));
+				const ask = state.asks.get(callId);
+				if (ask === undefined) return;
+				ask.card = message.isError === true ? [] : answerCard(ask.questions, parseAnswerBatch(contentText(message.content)));
+				return;
+			}
+			if (current.type === "tool/ptc-dispatch-start") {
+				if (data.name !== "ask_user_question") return;
+				const callId = String(data.subCallId);
+				const turn = state.turns.get(String(data.parentCallId));
+				state.asks.set(callId, {
+					callId,
+					turn: turn === undefined ? Number.NaN : turn,
+					questions: questionsOfArguments(data.arguments),
+					card: [],
+				});
+				return;
+			}
+			if (current.type === "tool/ptc-dispatch") {
+				if (data.name !== "ask_user_question") return;
+				const ask = state.asks.get(String(data.subCallId));
+				if (ask === undefined) return;
+				ask.card = data.isError === true ? [] : answerCard(ask.questions, parseAnswerBatch(contentText(data.content)));
+			}
+		}
+
+		/**
+		 * 折叠状态 → 有回答的条目列表(按轮次升序)。轮次未知(NaN)的条目直接丢掉:
+		 * 那种情况多半是父调用已经滚出事件窗口, DOM 路径仍会给出该条的横杠。
+		 * @param {object} state - createAskFold() 的状态。
+		 * @returns {{callId: string, turn: number, card: {question: string, answer: string}[]}[]} 条目。
+		 */
+		function answerEntriesOf(state) {
+			const out = [];
+			for (const ask of state.asks.values()) {
+				if (!Number.isInteger(ask.turn) || ask.card.length === 0) continue;
+				out.push({ callId: ask.callId, turn: ask.turn, card: ask.card });
+			}
+			out.sort((left, right) => left.turn - right.turn);
+			return out;
+		}
+
+		/**
+		 * 纯函数: 把一组会话事件折成回答条目(单测与排障用)。
+		 * @param {object[]} events - 事件数组; 元素可以是 SessionEvent, 也可以是 {event} 形式的历史条目。
+		 * @returns {{callId: string, turn: number, card: {question: string, answer: string}[]}[]} 条目。
+		 */
+		function foldAskAnswers(events) {
+			const state = createAskFold();
+			for (const entry of Array.isArray(events) ? events : []) foldAskEvent(state, entry);
+			return answerEntriesOf(state);
+		}
+
+		/**
+		 * 把事件侧的回答补进 DOM 侧的条目(0.7.0)。
+		 * 只补"DOM 读不到回答"的那几条, DOM 一旦读得到就以 DOM 为准(视觉与描述完全一致);
+		 * 事件里多出来的条目**不新增** —— 保持"只覆盖已加载窗口"的既有口径。
+		 * @param {object[]} domAsks - findAsksInDom() 的条目。
+		 * @param {object[]} eventAsks - answerEntriesOf() 的条目。
+		 * @returns {object[]} 合并后的条目(未补到任何一条时返回原数组, 避免无谓重渲染)。
+		 */
+		function mergeAskAnswers(domAsks, eventAsks) {
+			if (eventAsks.length === 0) return domAsks;
+			const answers = new Map();
+			for (const ask of eventAsks) answers.set(ask.callId, ask.card);
+			let changed = false;
+			const merged = domAsks.map((ask) => {
+				if (ask.card.length > 0) return ask;
+				const card = answers.get(ask.callId);
+				if (card === undefined || card.length === 0) return ask;
+				changed = true;
+				return { callId: ask.callId, turn: ask.turn, card };
+			});
+			return changed ? merged : domAsks;
+		}
+
+		/**
+		 * 当前会话的「提问回答」订阅源(0.7.0): 折会话事件里的 ask_user_question。
+		 *
+		 * 为什么要有它: 回答卡只在提问行**展开时**才被渲染, 而官方默认收起 —— 靠
+		 * dsh-patch-ask-expand 让行默认展开只是一层外部补丁(2026-11-20 起该补丁还失效过);
+		 * 事件侧的回答与展开态、虚拟化窗口都无关, 是回答行的主口径, DOM 退化成补充。
+		 * 形状与 createOutlineStore 一致(useSyncExternalStore 的 store), 同样跟随主视图会话。
+		 * @param {object} ctx - 客户端 cordis 上下文。
+		 * @returns {{subscribe: Function, getSnapshot: Function, dispose: Function}} 订阅源。
+		 */
+		function createAskAnswerStore(ctx) {
+			const listeners = new Set();
+			let stopFeed = null;
+			let sessionId;
+			let state = createAskFold();
+			let snapshot = [];
+			let lastKey = null;
+			/** 内容指纹不变就不通知, 避免 useSyncExternalStore 反复重渲染。 */
+			const publish = () => {
+				const next = answerEntriesOf(state);
+				const key = next
+					.map((ask) => `${ask.turn}:${ask.callId}:${ask.card.map((item) => item.answer).join("\u0001")}`)
+					.join("|");
+				if (key === lastKey) return;
+				lastKey = key;
+				snapshot = next;
+				for (const listener of [...listeners]) listener();
+			};
+			/** 按事件窗口的增量折进来(替换窗口时重折全部)。 */
+			const consume = (window) => {
+				if (window === null || window === undefined || !Array.isArray(window.entries)) return;
+				const change = window.change;
+				if (change === undefined || change === null || change.kind === "replace") {
+					state = createAskFold();
+					for (const entry of window.entries) foldAskEvent(state, entry);
+					return;
+				}
+				// settle-assistant 只改 assistant 行, 与提问无关。
+				if (change.kind === "append" || change.kind === "prepend") {
+					for (const entry of change.entries) foldAskEvent(state, entry);
+				}
+			};
+			/** 跟随主视图会话切换, 换绑事件源。 */
+			const bindSession = () => {
+				const next = ctx.uiSession.current.getSnapshot()?.key;
+				if (next === sessionId) return;
+				sessionId = next;
+				if (stopFeed !== null) {
+					stopFeed();
+					stopFeed = null;
+				}
+				state = createAskFold();
+				lastKey = null;
+				const feed = next === undefined ? undefined : ctx.sessions.binding(next)?.eventSource;
+				if (feed !== undefined && feed !== null && typeof feed.getSnapshot === "function" && typeof feed.subscribe === "function") {
+					consume(feed.getSnapshot());
+					stopFeed = feed.subscribe(() => {
+						consume(feed.getSnapshot());
+						publish();
+					});
+				}
+				publish();
+			};
+			const stopCurrent = ctx.uiSession.current.subscribe(() => {
+				bindSession();
+				publish();
+			});
+			bindSession();
+
+			return {
+				subscribe(listener) {
+					listeners.add(listener);
+					return () => {
+						listeners.delete(listener);
+					};
+				},
+				getSnapshot() {
+					return snapshot;
+				},
+				dispose() {
+					stopCurrent();
+					if (stopFeed !== null) stopFeed();
+					listeners.clear();
+				},
+			};
+		}
+
+		/**
 		 * 从 DOM 里找出当前已加载窗口内的所有「提问」行, 归到各自的轮次。
 		 * 为什么用 DOM 而不是投影: 提问属于工具调用, `turnOutline` 投影里只有每轮的提问/回答文本,
 	 * 没有工具调用信息; 而提问行自身带 `data-tool="ask_user_question"`, 外层 `ztWv_q_callRow`
@@ -588,14 +879,15 @@ window.__ModuleLoader__.load({
 		 * 都要当拍换掉渲染结果 —— 只按 turn:callId 记指纹会让回答永远刷不出来。
 		 * @returns {{callId: string, turn: number, card: {question: string, answer: string}[]}[]} 提问条目。
 		 */
-		function useAskEntries() {
+		function useAskEntries(eventAsks) {
 			const [asks, setAsks] = React.useState([]);
 			React.useEffect(() => {
 				let stopped = false;
 				let lastKey = null;
 				const scan = () => {
 					if (stopped) return;
-					const next = findAsksInDom();
+					// 事件侧的回答补进来(0.7.0): 提问行折叠时 DOM 里没有答案卡, 事件里仍然有。
+					const next = mergeAskAnswers(findAsksInDom(), eventAsks);
 					const key = next
 						.map((ask) => `${ask.turn}:${ask.callId}:${ask.card.map((item) => item.answer).join("\u0001")}`)
 						.join("|");
@@ -609,7 +901,8 @@ window.__ModuleLoader__.load({
 					stopped = true;
 					clearInterval(timer);
 				};
-			}, []);
+				// eventAsks 变了(作答落地/切会话)就要重扫, 否则新回答永远刷不出来。
+			}, [eventAsks]);
 			return asks;
 		}
 
@@ -760,9 +1053,10 @@ window.__ModuleLoader__.load({
 		 * @param store - turnOutline store。
 		 * @returns 注册进 shell.overlay 的函数组件。
 		 */
-		function createTurnLabels(store) {
+		function createTurnLabels(store, answerStore) {
 			return function TurnLabels() {
 				const entries = React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+				const eventAsks = React.useSyncExternalStore(answerStore.subscribe, answerStore.getSnapshot, answerStore.getSnapshot);
 				const rail = useRailGeometry();
 				const nav = rail === null ? null : rail.nav;
 				useRailCover(nav);
@@ -774,7 +1068,7 @@ window.__ModuleLoader__.load({
 				const [activeIndex, setActiveIndex] = React.useState(-1);
 				const [scrollState, setScrollState] = React.useState({ over: false, top: true, bottom: true });
 				// 已加载窗口里的「提问」条目(每轮可能有多个), 与几何轮询同频刷新。
-				const asks = useAskEntries();
+				const asks = useAskEntries(eventAsks);
 				/**
 				 * 提问条目占的总高度(px): 回答文字行 ANSWER_ROW_PX, 兜底小横杠 ASK_ROW_PX(0.6.0)。
 				 * 放在所有 effect 之前算 —— 下面几个 effect 的依赖数组要用它, 写在其后会踩 TDZ。
@@ -1237,8 +1531,10 @@ window.__ModuleLoader__.load({
 		 */
 		function apply(ctx) {
 			const store = createOutlineStore(ctx);
+			const askStore = createAskAnswerStore(ctx);
 			ctx.effect(() => () => {
 				store.dispose();
+				askStore.dispose();
 			});
 			ctx.slots.inject("shell.overlay", () =>
 				ctx.slots.register(
@@ -1246,14 +1542,14 @@ window.__ModuleLoader__.load({
 						name: "shell.overlay",
 						id: "dsh-turn-labels",
 					},
-					createTurnLabels(store),
+					createTurnLabels(store, askStore),
 				),
 			);
 			// 调试句柄: 控制台 window.__TURN_LABELS__.entries() / .rail() / .fallback() / .asks()
 			//          / .revealTrace() / .geometry() / .contentRight()
 			if (typeof window !== "undefined") {
 				window.__TURN_LABELS__ = {
-					version: "0.6.1",
+					version: "0.7.0",
 					entries: () => store.getSnapshot(),
 					rail: () => findRailNav(),
 					/** 内置轨缺席时用的等价几何(单轮会话); 有内置轨时返回 null, 不影响它。 */
@@ -1264,6 +1560,10 @@ window.__ModuleLoader__.load({
 					contentRight: () => readContentRight(),
 					/** 当前已加载窗口里的提问条目(轮次 + callId + 读到的问答 card)。 */
 					asks: () => findAsksInDom(),
+					/** 事件侧折出的回答条目(与 DOM 展开态无关; 0.7.0)。 */
+					eventAsks: () => askStore.getSnapshot(),
+					/** 纯函数: 把会话事件数组折成回答条目(排障与单测用)。 */
+					foldAsks: (events) => foldAskAnswers(events),
 					/** 最近一次"点击小横杠 -> 揭示提问行"的过程轨迹。 */
 					revealTrace: () => revealTrace.slice(-12),
 					/** 手动触发一次揭示(排障用)。 */
